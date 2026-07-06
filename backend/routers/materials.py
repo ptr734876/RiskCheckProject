@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException
 from typing import Optional
-from backend.models import Article
 
-router = APIRouter(prefix="/materials", tags=["Materials"])
+from flask import Blueprint, jsonify, request
+
+router = Blueprint("materials", __name__, url_prefix="/materials")
 
 ARTICLES = [
     {
@@ -46,22 +46,23 @@ ARTICLES = [
     }
 ]
 
-# выписать статьи либо все либо соответствующие поисковой строке
-@router.get("/")
-async def get_articles(search: Optional[str] = None):
+# Вернуть статьи: все или отфильтрованные по поисковому запросу
+@router.route("/", methods=["GET"])
+def get_articles():
+    search = request.args.get("search")
     if search:
         filtered = [
-            a for a in ARTICLES 
-            if search.lower() in a["title"].lower() 
+            a for a in ARTICLES
+            if search.lower() in a["title"].lower()
             or search.lower() in a["description"].lower()
         ]
-        return {"articles": filtered}
-    return {"articles": ARTICLES}
+        return jsonify({"articles": filtered})
+    return jsonify({"articles": ARTICLES})
 
-# переход по конкретной статье чтобы прочитать ее
-@router.get("/{article_id}")
-async def get_article(article_id: str):
+# Вернуть одну статью по идентификатору
+@router.route("/<article_id>", methods=["GET"])
+def get_article(article_id: str):
     for a in ARTICLES:
         if a["id"] == article_id:
-            return a
-    raise HTTPException(status_code=404, detail="Article not found")
+            return jsonify(a)
+    return jsonify({"detail": "Article not found"}), 404

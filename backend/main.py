@@ -1,43 +1,48 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from flask import Flask, jsonify
+from flask_cors import CORS
 from routers import auth, documents, materials, algorithms, mapping
 
-app = FastAPI(title="RiskCheck API", version="1.0.0")
 
-# Разрешение браузеру от сервера на отправку запросов
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # определяет список доменов которым можно обращаться
-    allow_credentials=True, # разрешение на отправку токенов вместе с запросами
-    allow_methods=["*"], # определяет какими методами браузеру можно общаться с сервером
-    allow_headers=["*"], # определяет какие заголовки может закреплять браузер
-)
+def create_app() -> Flask:
+    app = Flask(__name__)
 
-# Подключаем роутеры
-app.include_router(auth.router)
-app.include_router(mapping.router)
-app.include_router(documents.router)
-app.include_router(materials.router)
-app.include_router(algorithms.router)
+    # Разрешение браузеру от сервера на отправку запросов
+    CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-# Для быстрой проверки работы сервиса
-@app.get("/")
-async def root():
-    return {"message": "RiskCheck API is running"}
+    # Подключаем роутеры
+    app.register_blueprint(auth.router)
+    app.register_blueprint(mapping.router)
+    app.register_blueprint(documents.router)
+    app.register_blueprint(materials.router)
+    app.register_blueprint(algorithms.router)
 
-# Проверка состояния сервиса
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+    # Для быстрой проверки работы сервиса
+    @app.route("/", methods=["GET"])
+    def root():
+        return jsonify({"message": "RiskCheck API is running"})
 
-# Получаем все варианты дальнейшей работы
-@app.get("/variants")
-async def get_variants():
-    return {
-        "variants": [
-            {"id": 0, "label": "Вариант 1", "description": "Оценка и аналитика объекта"},
-            {"id": 1, "label": "Вариант 2", "description": "Документы для продажи"},
-            {"id": 2, "label": "Вариант 3", "description": "Полезные материалы"},
-            {"id": 3, "label": "Вариант 4", "description": "Алгоритмы"}
-        ]
-    }
+    # Проверка состояния сервиса
+    @app.route("/health", methods=["GET"])
+    def health():
+        return jsonify({"status": "ok"})
+
+    # Получаем все варианты дальнейшей работы
+    @app.route("/variants", methods=["GET"])
+    def get_variants():
+        return jsonify({
+            "variants": [
+                {"id": 0, "label": "Вариант 1", "description": "Оценка и аналитика объекта"},
+                {"id": 1, "label": "Вариант 2", "description": "Документы для продажи"},
+                {"id": 2, "label": "Вариант 3", "description": "Полезные материалы"},
+                {"id": 3, "label": "Вариант 4", "description": "Алгоритмы"}
+            ]
+        })
+
+    return app
+
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    app.run(debug=True)

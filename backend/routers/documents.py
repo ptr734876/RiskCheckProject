@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
-from backend.models import Document, ToggleRequest, MFCLocation
 
-router = APIRouter(prefix="/documents", tags=["Documents"])
+from flask import Blueprint, jsonify, request
+from pydantic import ValidationError
+
+from backend.models import ToggleRequest
+
+router = Blueprint("documents", __name__, url_prefix="/documents")
 
 DOCUMENTS = [
     {"title": "Выписка из ЕГРН", "note": "Срок действия — 30 дней с момента получения", "required": True, "link": "egrn"},
@@ -17,61 +20,72 @@ MFC_LOCATIONS = [
     {"name": "МФЦ «Гражданин»", "address": "ул. Советская, 88", "time": "9:00–18:00", "distance": "2.1 км"},
 ]
 
-# Хранилище состояний галочек, подгружать из бд, только по кнкретному пользователю
-# передавать имя пользователя, id доков которые отмечены
+# Хранилище отметок документов по пользователю.
 user_checks: dict[str, set] = {}
 
-# просто список документов с их статусом
-@router.get("/")
-async def get_documents(user_id: Optional[str] = None):
+# Список документов с текущим состоянием отметок
+@router.route("/", methods=["GET"])
+def get_documents():
+    user_id = request.args.get("user_id")
     checked_titles = user_checks.get(user_id, set()) if user_id else set()
-    
+
     # создаем список документов с состояниями того прочерены ли они
     docs = []
     for doc in DOCUMENTS:
         doc_copy = doc.copy()
         doc_copy["checked"] = doc["title"] in checked_titles
         docs.append(doc_copy)
-    
-    return {
+
+    return jsonify({
         "documents": docs,
         "total": len(docs),
         "checked_count": sum(1 for d in docs if d["checked"])
-    }
+    })
 
-# переключение статуса состояния документов
-@router.patch("/{doc_title}/toggle")
-async def toggle_document(doc_title: str, request: ToggleRequest, user_id: str):
+# Переключение статуса документа
+@router.route("/<doc_title>/toggle", methods=["PATCH"])
+def toggle_document(doc_title: str):
     if doc_title not in [d["title"] for d in DOCUMENTS]:
-        raise HTTPException(status_code=404, detail="Document not found")
-    
+        return jsonify({"detail": "Document not found"}), 404
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        request_data = ToggleRequest.model_validate(payload)
+    except ValidationError as exc:
+        return jsonify({"detail": exc.errors()}), 400
+
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"detail": "user_id is required"}), 400
+
     if user_id not in user_checks:
         user_checks[user_id] = set()
-    
-    if request.checked:
+
+    if request_data.checked:
         user_checks[user_id].add(doc_title)
     else:
         user_checks[user_id].discard(doc_title)
-    
-    return {
-        "message": f"Document {'checked' if request.checked else 'unchecked'}",
-        "checked": request.checked,
+
+    return jsonify({
+        "message": f"Document {'checked' if request_data.checked else 'unchecked'}",
+        "checked": request_data.checked,
         "total_checked": len(user_checks[user_id])
-    }
+    })
 
-# возвращает список МФЦ
-@router.get("/mfc")
-async def get_mfc():
-    return {"locations": MFC_LOCATIONS}
+# Получить список МФЦ
+@router.route("/mfc", methods=["GET"])
+def get_mfc():
+    return jsonify({"locations": MFC_LOCATIONS})
 
-# расчет процента собранных доков (мб не надо выше тоггл докс может тоже самое сделать впринципе)
-@router.get("/stats")
-async def get_stats(user_id: Optional[str] = None):
+# Получить прогресс по собранным документам
+@router.route("/stats", methods=["GET"])
+def get_stats():
+    user_id = request.args.get("user_id")
     total = len(DOCUMENTS)
     checked = len(user_checks.get(user_id, set())) if user_id else 0
-    return {
+    return jsonify({
         "total": total,
         "checked": checked,
         "unchecked": total - checked,
         "progress": round((checked / total * 100) if total > 0 else 0, 1)
-    }
+    })

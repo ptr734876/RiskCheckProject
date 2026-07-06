@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException
 from typing import Optional
-from backend.models import AlgorithmStep, Algorithm
 
-router = APIRouter(prefix="/algorithms", tags=["Algorithms"])
+from flask import Blueprint, jsonify, request
+
+router = Blueprint("algorithms", __name__, url_prefix="/algorithms")
 
 ALGORITHMS = [
     {
@@ -29,17 +29,17 @@ ALGORITHMS = [
     }
 ]
 
-# Временное хранилище прогресса (подобно галочкам из доков)
-user_progress = {} 
+# Временное хранилище прогресса выполнения шагов алгоритмов
+user_progress = {}
 
-# выдает все доступные пользователю алгоритмы
-# лезет в хранилище и ищет его прогресс по алгоритмам и ставит им галочки
-@router.get("/")
-async def get_algorithms(user_id: Optional[str] = None):
+# Вернуть алгоритмы с текущим прогрессом пользователя
+@router.route("/", methods=["GET"])
+def get_algorithms():
+    user_id = request.args.get("user_id")
     result = []
     for algo in ALGORITHMS:
         algo_copy = algo.copy()
-        
+
         # Добавляем прогресс пользователя
         if user_id and user_id in user_progress:
             completed = user_progress[user_id].get(algo["id"], set())
@@ -48,19 +48,20 @@ async def get_algorithms(user_id: Optional[str] = None):
             algo_copy["completed_steps"] = len(completed)
         else:
             algo_copy["completed_steps"] = 0
-        
+
         algo_copy["total_steps"] = len(algo_copy["steps"])
         result.append(algo_copy)
-    
-    return {"algorithms": result}
 
-# при переходе на конкретный алгоритм выписывает его шаги
-@router.get("/{algorithm_id}")
-async def get_algorithm(algorithm_id: int, user_id: Optional[str] = None):
+    return jsonify({"algorithms": result})
+
+# Вернуть конкретный алгоритм вместе с его шагами
+@router.route("/<int:algorithm_id>", methods=["GET"])
+def get_algorithm(algorithm_id: int):
+    user_id = request.args.get("user_id")
     for algo in ALGORITHMS:
         if algo["id"] == algorithm_id:
             algo_copy = algo.copy()
-            
+
             if user_id and user_id in user_progress:
                 completed = user_progress[user_id].get(algorithm_id, set())
                 for step in algo_copy["steps"]:
@@ -68,28 +69,32 @@ async def get_algorithm(algorithm_id: int, user_id: Optional[str] = None):
                 algo_copy["completed_steps"] = len(completed)
             else:
                 algo_copy["completed_steps"] = 0
-            
-            algo_copy["total_steps"] = len(algo_copy["steps"])
-            return algo_copy
-    
-    raise HTTPException(status_code=404, detail="Algorithm not found")
 
-# Переключение статуса каждого шага алгоритма
-@router.patch("/{algorithm_id}/step/{step_number}")
-async def toggle_step(algorithm_id: int, step_number: int, user_id: str):
+            algo_copy["total_steps"] = len(algo_copy["steps"])
+            return jsonify(algo_copy)
+
+    return jsonify({"detail": "Algorithm not found"}), 404
+
+# Переключить статус шага алгоритма
+@router.route("/<int:algorithm_id>/step/<int:step_number>", methods=["PATCH"])
+def toggle_step(algorithm_id: int, step_number: int):
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"detail": "user_id is required"}), 400
+
     algo = next((a for a in ALGORITHMS if a["id"] == algorithm_id), None)
     if not algo:
-        raise HTTPException(status_code=404, detail="Algorithm not found")
-    
+        return jsonify({"detail": "Algorithm not found"}), 404
+
     if step_number not in [s["step"] for s in algo["steps"]]:
-        raise HTTPException(status_code=404, detail="Step not found")
-    
+        return jsonify({"detail": "Step not found"}), 404
+
     if user_id not in user_progress:
         user_progress[user_id] = {}
-    
+
     if algorithm_id not in user_progress[user_id]:
         user_progress[user_id][algorithm_id] = set()
-    
+
     completed = user_progress[user_id][algorithm_id]
     if step_number in completed:
         completed.remove(step_number)
@@ -97,9 +102,9 @@ async def toggle_step(algorithm_id: int, step_number: int, user_id: str):
     else:
         completed.add(step_number)
         status = "completed"
-    
-    return {
+
+    return jsonify({
         "message": f"Step {step_number} {status}",
         "completed_steps": len(completed),
         "total_steps": len(algo["steps"])
-    }
+    })

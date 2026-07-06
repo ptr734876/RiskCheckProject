@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional, Dict
-from backend.models import LegalInfo, Surroundings, Property, SearchResult
-router = APIRouter(prefix="/mapping", tags=["Mapping"])
 
-# пример данныйх, затем следует подгружать из базы данных
+from flask import Blueprint, jsonify, request
+
+router = Blueprint("mapping", __name__, url_prefix="/mapping")
+
+# Пример данных, позже их можно заменить на данные из базы
 PROPERTIES = [
     {
-        "id": 1, 
-        "x": 148, 
+        "id": 1,
+        "x": 148,
         "y": 92,
         "address": "ул. Садовая, 14",
         "type": "Квартира",
@@ -40,9 +41,9 @@ PROPERTIES = [
     },
 ]
 
-# Хелперы
+# Вспомогательные функции
 
-# простой механизм чтобы найти ближайший объект к заданому адресу
+# Найти ближайший объект к заданным координатам
 def find_closest_property(x:int, y:int, threshold: int = 50) -> Optional[Dict]:
     closest = None
     min_distance = float('inf')
@@ -55,30 +56,31 @@ def find_closest_property(x:int, y:int, threshold: int = 50) -> Optional[Dict]:
 
     return closest
 
-# поиск по конкретному адресу
+# Найти объект по адресу
 def find_property_by_address(query: str) -> Optional[Dict]:
     for p in PROPERTIES:
         if query.lower() in p['address'].lower():
             return p
     return None
 
-# Возвращает список объектов по запросу пользователя
-@router.get("/properties")
-async def get_properties():
-    return {"properties": PROPERTIES}
+# Вернуть список объектов
+@router.route("/properties", methods=["GET"])
+def get_properties():
+    return jsonify({"properties": PROPERTIES})
 
-# Получение информации по выбранному объекту
-@router.get("/properties/{property_id}")
-async def get_property(property_id: int):
+# Вернуть информацию по выбранному объекту
+@router.route("/properties/<int:property_id>", methods=["GET"])
+def get_property(property_id: int):
     for p in PROPERTIES:
         if p["id"] == property_id:
-            return p
-    raise HTTPException(status_code=404, detail="Property not found")
+            return jsonify(p)
+    return jsonify({"detail": "Property not found"}), 404
 
-# ищем по тому, что написано в поиске
-@router.get("/search")
-async def search_property(query: str):
+# Найти объект по строке поиска
+@router.route("/search", methods=["GET"])
+def search_property():
+    query = request.args.get("query", "")
     found = next((p for p in PROPERTIES if query.lower() in p["address"].lower()), None)
     if found:
-        return {"property": found, "location": {"x": found["x"], "y": found["y"]}}
-    return {"property": None, "location": None}
+        return jsonify({"property": found, "location": {"x": found["x"], "y": found["y"]}})
+    return jsonify({"property": None, "location": None})
