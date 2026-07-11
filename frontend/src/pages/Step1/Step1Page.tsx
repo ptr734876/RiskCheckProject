@@ -1,0 +1,372 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, X, Shield, Globe, Lock, MapPin, HelpCircle, ArrowLeft, ArrowRight, Info } from 'lucide-react';
+import AerialMap from '@/components/ui/AerialMap';
+import { PROPERTIES } from '@/data/constants';
+import { useAuthStore } from '@/store/authStore';
+import { useNavigationStore } from '@/store/navigationStore';
+import type { Property, SurroundingItem } from '@/types';
+
+interface LegalItemWithTip {
+  label: string;
+  value: string;
+  tip?: string;
+  impact?: string;
+  link?: { type: 'helpful' | 'algorithm'; id: string } | null;
+}
+
+const Tooltip: React.FC<{
+  isVisible: boolean;
+  children: React.ReactNode;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+  className?: string;
+}> = ({ isVisible, children, onMouseEnter, onMouseLeave, className = '' }) => {
+  const [shouldRender, setShouldRender] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    if (isVisible) {
+      setShouldRender(true);
+      const timer = setTimeout(() => setIsAnimating(true), 10);
+      return () => clearTimeout(timer);
+    } else {
+      setIsAnimating(false);
+      const timer = setTimeout(() => setShouldRender(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible]);
+
+  if (!shouldRender) return null;
+
+  return (
+    <div
+      className={`absolute bottom-full left-0 mb-2 w-full p-4 bg-amber-50 border-2 border-amber-200 rounded-xl shadow-lg transition-all duration-300 ease-in-out z-10 ${className} ${
+        isAnimating ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+      }`}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {children}
+    </div>
+  );
+};
+
+const LegalItem: React.FC<{
+  item: LegalItemWithTip;
+  isHovered: boolean;
+  onHover: () => void;
+  onLeave: () => void;
+  onTooltipEnter: () => void;
+  onTooltipLeave: () => void;
+  onLinkClick: (item: any) => void;
+}> = ({ item, isHovered, onHover, onLeave, onTooltipEnter, onTooltipLeave, onLinkClick }) => {
+  const hasTip = !!(item.tip || item.impact || item.link);
+
+  return (
+    <div className="relative">
+      <div className="flex items-baseline gap-1">
+        <span className="text-text-muted whitespace-nowrap">{item.label}:</span>
+        <span className="text-text-primary font-medium break-words flex-1">{item.value}</span>
+        {hasTip && (
+          <button
+            className="shrink-0 text-text-muted hover:text-primary transition-colors ml-1"
+            onMouseEnter={onHover}
+            onMouseLeave={onLeave}
+          >
+            <Info className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      <Tooltip isVisible={isHovered} onMouseEnter={onTooltipEnter} onMouseLeave={onTooltipLeave}>
+        {item.impact && <p className="text-base text-text-secondary leading-relaxed mb-2 break-words">{item.impact}</p>}
+        {item.tip && <p className="text-sm text-text-muted leading-relaxed mb-2 break-words">{item.tip}</p>}
+        {item.link && (
+          <button
+            onClick={() => onLinkClick(item)}
+            className="text-sm text-primary font-bold hover:text-primary-dark transition-colors inline-flex items-center gap-1 bg-white border-2 border-primary/30 rounded-lg px-3 py-2"
+          >
+            Перейти к рекомендациям <ArrowLeft className="w-4 h-4 rotate-180" />
+          </button>
+        )}
+      </Tooltip>
+    </div>
+  );
+};
+
+const SurroundingItem: React.FC<{
+  item: SurroundingItem;
+  isHovered: boolean;
+  onHover: () => void;
+  onLeave: () => void;
+  onTooltipEnter: () => void;
+  onTooltipLeave: () => void;
+  onLinkClick: (item: any) => void;
+}> = ({ item, isHovered, onHover, onLeave, onTooltipEnter, onTooltipLeave, onLinkClick }) => {
+  const dotColor = item.type === 'plus' ? 'bg-green-500' : 'bg-red-500';
+
+  return (
+    <div className="relative">
+      <div className="flex items-start gap-3 group">
+        <span className={`inline-block w-2 h-2 rounded-full ${dotColor} mt-2 shrink-0`} />
+        <span className="text-base text-text-primary leading-relaxed flex-1 break-words">{item.text}</span>
+        <button
+          className="shrink-0 text-text-muted hover:text-primary transition-colors"
+          onMouseEnter={onHover}
+          onMouseLeave={onLeave}
+        >
+          <HelpCircle className="w-5 h-5" />
+        </button>
+      </div>
+      <Tooltip isVisible={isHovered} onMouseEnter={onTooltipEnter} onMouseLeave={onTooltipLeave} className="ml-5">
+        <p className="text-base text-text-secondary leading-relaxed mb-2 break-words">{item.impact}</p>
+        <p className="text-sm text-text-muted leading-relaxed mb-2 break-words">{item.tip}</p>
+        {item.link && (
+          <button
+            onClick={() => onLinkClick(item)}
+            className="text-sm text-primary font-bold hover:text-primary-dark transition-colors inline-flex items-center gap-1 bg-white border-2 border-primary/30 rounded-lg px-3 py-2"
+          >
+            Перейти к рекомендациям <ArrowLeft className="w-4 h-4 rotate-180" />
+          </button>
+        )}
+      </Tooltip>
+    </div>
+  );
+};
+
+const Step1Page: React.FC = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [clickedPoint, setClickedPoint] = useState<{ x: number; y: number } | null>(null);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [hoveredSurrIndex, setHoveredSurrIndex] = useState<number | null>(null);
+  const [hoveredLegalIndex, setHoveredLegalIndex] = useState<{ type: 'public' | 'private'; index: number } | null>(null);
+  const [isTooltipHovered, setIsTooltipHovered] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+  const legalTimeoutRef = useRef<number | null>(null);
+  const { isAuthenticated } = useAuthStore();
+  const { setMaterialsBackRoute, setAlgorithmsBackRoute } = useNavigationStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (legalTimeoutRef.current) clearTimeout(legalTimeoutRef.current);
+    };
+  }, []);
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setClickedPoint(null);
+      setSelectedProperty(null);
+      return;
+    }
+    const found = PROPERTIES.find(p => p.address.toLowerCase().includes(query.toLowerCase()));
+    if (found) {
+      setClickedPoint({ x: found.x, y: found.y });
+      setSelectedProperty(found);
+    }
+  };
+
+  const handleMapClick = (x: number, y: number) => {
+    setClickedPoint({ x, y });
+    const found = PROPERTIES.find(p => Math.abs(p.x - x) < 50 && Math.abs(p.y - y) < 50);
+    if (found) {
+      setSelectedProperty(found);
+      setSearchQuery(found.address);
+    } else {
+      setSelectedProperty(null);
+    }
+  };
+
+  const handleLinkClick = (item: any) => {
+    if (!item.link) return;
+    const route = item.link.type === 'helpful' ? '/app/materials' : '/app/step3';
+    const setBackRoute = item.link.type === 'helpful' ? setMaterialsBackRoute : setAlgorithmsBackRoute;
+    setBackRoute({ path: '/app/step1', label: `Назад к «${item.text || item.label}»` });
+    navigate(route);
+  };
+
+  const createTooltipHandlers = (
+    setHovered: (value: any) => void,
+    timeoutRef: React.MutableRefObject<number | null>,
+    getValue: () => any
+  ) => ({
+    onHover: (value: any) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      setIsTooltipHovered(false);
+      setHovered(value);
+    },
+    onLeave: () => {
+      if (!isTooltipHovered) {
+        timeoutRef.current = window.setTimeout(() => {
+          setHovered(null);
+        }, 300);
+      }
+    },
+    onTooltipEnter: () => {
+      setIsTooltipHovered(true);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    },
+    onTooltipLeave: () => {
+      setIsTooltipHovered(false);
+      timeoutRef.current = window.setTimeout(() => {
+        setHovered(null);
+      }, 300);
+    },
+  });
+
+  const surrHandlers = createTooltipHandlers(
+    setHoveredSurrIndex,
+    timeoutRef,
+    () => hoveredSurrIndex
+  );
+
+  const legalHandlers = createTooltipHandlers(
+    (value: any) => setHoveredLegalIndex(value),
+    legalTimeoutRef,
+    () => hoveredLegalIndex
+  );
+
+  const sortedSurroundings = selectedProperty?.surroundings
+    ? [...selectedProperty.surroundings].sort((a, b) => {
+        if (a.type === 'plus' && b.type === 'minus') return -1;
+        if (a.type === 'minus' && b.type === 'plus') return 1;
+        return 0;
+      })
+    : [];
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Шапка */}
+      <div className="bg-white border-b-2 border-border p-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="shrink-0">
+            <p className="text-sm uppercase tracking-wider text-primary font-bold mb-1">Шаг 1</p>
+            <h2 className="text-xl font-bold font-display text-text-primary">Выберите недвижимость для оценки и анализа</h2>
+          </div>
+          <div className="relative flex-1 max-w-xl ml-auto">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+            <input
+              type="text"
+              placeholder="Введите адрес..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="w-full bg-white border-2 border-border rounded-xl pl-12 pr-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+            {searchQuery && (
+              <button onClick={() => handleSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="max-w-4xl mx-auto mb-4">
+          <div className="rounded-xl border-2 border-border shadow-md overflow-hidden" style={{ aspectRatio: '480/260' }}>
+            <AerialMap clickedPoint={clickedPoint} onMapClick={handleMapClick} />
+          </div>
+          {!clickedPoint && <p className="text-sm text-text-muted mt-2 text-right">Кликните по карте или найдите адрес</p>}
+        </div>
+
+        {selectedProperty && (
+          <>
+            <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl border-2 border-border shadow-md p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Shield className="w-5 h-5 text-primary shrink-0" />
+                  <h3 className="text-sm uppercase tracking-wider text-primary font-bold">Юридические данные</h3>
+                  <span className="text-sm text-text-muted ml-auto truncate">{selectedProperty.address}</span>
+                </div>
+                <div className="space-y-4">
+                  {[
+                    { title: 'Открытые данные (Росреестр)', icon: Globe, data: selectedProperty.legal.public, type: 'public' as const },
+                    { title: 'Личные данные', icon: Lock, data: selectedProperty.legal.private, type: 'private' as const }
+                  ].map((section, idx) => (
+                    <div key={idx} className={idx > 0 ? 'pt-3 border-t-2 border-border' : ''}>
+                      <p className="text-sm font-semibold text-text-secondary flex items-center gap-2 mb-2">
+                        <section.icon className="w-4 h-4 shrink-0" /> {section.title}
+                      </p>
+                      {section.type === 'private' && !isAuthenticated ? (
+                        <p className="text-sm text-text-muted bg-slate-50 border border-border rounded-lg p-3">Данные доступны после авторизации</p>
+                      ) : (
+                        <div className="space-y-1">
+                          {(section.data as LegalItemWithTip[]).map((item, index) => {
+                            const isHovered = hoveredLegalIndex?.type === section.type && hoveredLegalIndex?.index === index;
+                            return (
+                              <LegalItem
+                                key={index}
+                                item={item}
+                                isHovered={isHovered}
+                                onHover={() => legalHandlers.onHover({ type: section.type, index })}
+                                onLeave={legalHandlers.onLeave}
+                                onTooltipEnter={legalHandlers.onTooltipEnter}
+                                onTooltipLeave={legalHandlers.onTooltipLeave}
+                                onLinkClick={handleLinkClick}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border-2 border-border shadow-md p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <MapPin className="w-5 h-5 text-primary shrink-0" />
+                  <h3 className="text-sm uppercase tracking-wider text-primary font-bold">Факты об окружении</h3>
+                  <span className="text-sm text-text-muted ml-auto truncate">{selectedProperty.type} • {selectedProperty.area}</span>
+                </div>
+                <div className="space-y-3">
+                  {sortedSurroundings.map((item, index) => (
+                    <SurroundingItem
+                      key={index}
+                      item={item}
+                      isHovered={hoveredSurrIndex === index}
+                      onHover={() => surrHandlers.onHover(index)}
+                      onLeave={surrHandlers.onLeave}
+                      onTooltipEnter={surrHandlers.onTooltipEnter}
+                      onTooltipLeave={surrHandlers.onTooltipLeave}
+                      onLinkClick={handleLinkClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="max-w-6xl mx-auto mt-6 flex justify-end">
+              <button
+                onClick={() => navigate('/app/step2')}
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-colors shadow-md hover:shadow-lg text-sm"
+              >
+                Перейти к следующему шагу
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </>
+        )}
+
+        {!selectedProperty && clickedPoint && (
+          <div className="max-w-2xl mx-auto mt-4">
+            <div className="bg-white rounded-xl border-2 border-dashed border-border p-8 text-center">
+              <MapPin className="w-12 h-12 text-text-muted mx-auto mb-3" />
+              <p className="text-base text-text-secondary">Объект не найден. Попробуйте другой адрес или точку на карте.</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Step1Page;
