@@ -49,18 +49,19 @@ export interface DocumentItem {
 
 // Algorithms 
 
-
 export interface AlgorithmStep {
   id: string;
   text: string;
   description?: string;
   isSubStep?: boolean;  
   link?: {
-    type: 'algorithm' | 'helpful' | 'step2';
+    type: 'algorithm' | 'helpful' | 'step1' | 'step2' | 'external';
     id: string;
     label: string;
+    url?: string;
   } | null;
 }
+
 export interface AlgorithmToggle {
   id: string;
   label: string;
@@ -73,6 +74,9 @@ export interface AlgorithmConfig {
   toggle?: {
     left: AlgorithmToggle;
     right: AlgorithmToggle;
+    middle1?: AlgorithmToggle;
+    middle2?: AlgorithmToggle;
+    middle3?: AlgorithmToggle;
   };
 }
 

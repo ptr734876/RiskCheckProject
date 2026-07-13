@@ -1,22 +1,38 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Lightbulb, ChevronLeft, ExternalLink, ArrowLeft } from 'lucide-react';
 import { useNavigationStore } from '@/store/navigationStore';
 import { HELPFUL_ARTICLES } from '@/data/constants';
 
 const MaterialsPage: React.FC = () => {
-  const [selectedArticleId, setSelectedArticleId] = useState(HELPFUL_ARTICLES[0]?.id || '');
+  const [searchParams] = useSearchParams();
+  const articleId = searchParams.get('article');
+  
+  const [selectedArticleId, setSelectedArticleId] = useState(
+    articleId && HELPFUL_ARTICLES.some(a => a.id === articleId) 
+      ? articleId 
+      : HELPFUL_ARTICLES[0]?.id || ''
+  );
+  
   const { materialsBackRoute, setMaterialsBackRoute } = useNavigationStore();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (articleId && HELPFUL_ARTICLES.some(a => a.id === articleId)) {
+      setSelectedArticleId(articleId);
+    }
+  }, [articleId]);
+
   const selectedArticle = HELPFUL_ARTICLES.find((a) => a.id === selectedArticleId) || HELPFUL_ARTICLES[0];
 
-  const handleBackClick = () => {
-    if (materialsBackRoute) {
-      navigate(materialsBackRoute.path);
-      setMaterialsBackRoute(null);
-    }
-  };
+const handleBackClick = () => {
+  if (materialsBackRoute) {
+    navigate(materialsBackRoute.path, { 
+      state: materialsBackRoute.state 
+    });
+    setMaterialsBackRoute(null);
+  }
+};
 
   const handlePrevStep = () => {
     navigate('/app/step3');
@@ -83,10 +99,12 @@ const MaterialsPage: React.FC = () => {
 
         <div className="max-w-3xl">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold font-display text-text-primary mb-2">
+            <h2 className="text-3xl font-bold font-display text-text-primary mb-1">
               {selectedArticle.title}
             </h2>
-            <p className="text-base text-text-secondary">{selectedArticle.description}</p>
+            <p className="text-lg text-text-secondary font-medium">
+              {selectedArticle.description}
+            </p>
           </div>
 
           {selectedArticle.keyPoints.length > 0 && (
@@ -107,7 +125,7 @@ const MaterialsPage: React.FC = () => {
 
           <div className="prose max-w-none">
             {selectedArticle.content.map((paragraph, idx) => (
-              <p key={idx} className="text-base text-text-secondary leading-relaxed mb-4">
+              <p key={idx} className="text-base text-text-primary font-medium leading-relaxed mb-4">
                 {paragraph}
               </p>
             ))}

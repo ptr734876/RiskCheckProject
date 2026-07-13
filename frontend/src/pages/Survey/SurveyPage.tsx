@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Check, ChevronLeft, ChevronRight, Save, ExternalLink, Building2 } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { useNavigationStore } from '@/store/navigationStore';
@@ -9,9 +9,23 @@ const SurveyPage: React.FC = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isCompleted, setIsCompleted] = useState(false);
+  
   const { setSurveyCompleted, setSurveyFormData } = useAppStore();
   const { setMaterialsBackRoute, setAlgorithmsBackRoute } = useNavigationStore();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state) {
+      const { stepIndex, formData: savedFormData } = location.state as {
+        stepIndex: number;
+        formData: Record<string, string>;
+      };
+      setCurrentStepIndex(stepIndex);
+      setFormData(savedFormData);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const currentStep = SURVEY_STEPS[currentStepIndex];
   const totalSteps = SURVEY_STEPS.length;
@@ -21,23 +35,19 @@ const SurveyPage: React.FC = () => {
     setFormData((prev) => ({ ...prev, [questionId]: value }));
   };
 
-  // Проверяем, должен ли вопрос отображаться
   const shouldShowQuestion = (question: any) => {
     if (!question.condition) return true;
     const { questionId, value } = question.condition;
     return formData[questionId] === value;
   };
 
-  // Получаем видимые вопросы для текущего шага
   const visibleQuestions = currentStep.questions.filter(shouldShowQuestion);
 
-  // Проверяем, есть ли хотя бы один видимый вопрос
   const hasVisibleQuestions = visibleQuestions.length > 0;
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Проверяем, что все видимые вопросы заполнены
     const allVisibleAnswered = visibleQuestions.every(
       (question) => formData[question.id] && formData[question.id].trim() !== ''
     );
@@ -69,13 +79,22 @@ const SurveyPage: React.FC = () => {
     navigate('/app');
   };
 
-  const handleLinkClick = (type: 'algorithm' | 'helpful') => {
+  const handleLinkClick = (type: 'algorithm' | 'helpful', id: string) => {
+    const backRoute = {
+      path: '/survey',
+      label: 'Вернуться к анкете',
+      state: {
+        stepIndex: currentStepIndex,
+        formData: formData,
+      },
+    };
+
     if (type === 'helpful') {
-      setMaterialsBackRoute({ path: '/survey', label: 'Вернуться к анкете' });
-      navigate('/app/materials');
+      setMaterialsBackRoute(backRoute);
+      navigate(`/app/materials?article=${id}`);
     } else {
-      setAlgorithmsBackRoute({ path: '/survey', label: 'Вернуться к анкете' });
-      navigate('/app/step3');
+      setAlgorithmsBackRoute(backRoute);
+      navigate(`/app/step3?algorithm=${id}`);
     }
   };
 
@@ -194,7 +213,7 @@ const SurveyPage: React.FC = () => {
                           <button
                             key={i}
                             type="button"
-                            onClick={() => handleLinkClick(link.type)}
+                            onClick={() => handleLinkClick(link.type, link.id)}
                             className="text-sm text-primary font-semibold hover:text-primary-dark bg-white border-2 border-primary/30 rounded-lg px-3 py-2 inline-flex items-center gap-1"
                           >
                             {link.label} <ExternalLink className="w-4 h-4" />

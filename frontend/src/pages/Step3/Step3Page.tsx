@@ -1,6 +1,5 @@
-// Step3Page.tsx
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { User, ChevronLeft, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useAppStore } from '@/store/appStore';
@@ -9,15 +8,48 @@ import { ALGORITHMS_CONFIG } from '@/data/constants';
 import AlgorithmToggle from '@/components/ui/AlgorithmToggle';
 
 const ALGORITHM_LIST = [
-  { id: 'general', label: 'Алгоритм продажи' },
+  { id: 'general', label: 'Продажа квартиры' },
+  { id: 'encumbrances', label: 'Проверка обременений' },
 ];
 
 const Step3Page: React.FC = () => {
-  const [activeAlgorithm, setActiveAlgorithm] = useState('general');
+  const [searchParams] = useSearchParams();
+  const algorithmParam = searchParams.get('algorithm');
+  
+  const [activeAlgorithm, setActiveAlgorithm] = useState(
+    algorithmParam && ALGORITHMS_CONFIG[algorithmParam] 
+      ? algorithmParam 
+      : 'general'
+  );
+  
   const { isAuthenticated } = useAuthStore();
   const { checkedAlgorithms, toggleAlgorithmStep } = useAppStore();
-  const { algorithmsBackRoute, setAlgorithmsBackRoute, setMaterialsBackRoute } = useNavigationStore();
+  const { 
+    algorithmsBackRoute, 
+    setAlgorithmsBackRoute, 
+    setMaterialsBackRoute, 
+    setStep1BackRoute 
+  } = useNavigationStore();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state) {
+      const { activeAlgorithm: savedAlgorithm } = location.state as {
+        activeAlgorithm?: string;
+      };
+      if (savedAlgorithm && ALGORITHMS_CONFIG[savedAlgorithm]) {
+        setActiveAlgorithm(savedAlgorithm);
+      }
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    if (algorithmParam && ALGORITHMS_CONFIG[algorithmParam]) {
+      setActiveAlgorithm(algorithmParam);
+    }
+  }, [algorithmParam]);
 
   const currentConfig = ALGORITHMS_CONFIG[activeAlgorithm];
   const currentAlgo = currentConfig?.steps || [];
@@ -28,38 +60,86 @@ const Step3Page: React.FC = () => {
 
   const hasToggle = !!currentConfig?.toggle;
   const toggleConfig = currentConfig?.toggle;
-  const isLeftMode = activeAlgorithm === toggleConfig?.left?.id;
+  
+  const getActiveToggleId = () => {
+    if (!toggleConfig) return 'left';
+    if (activeAlgorithm === toggleConfig.left?.id) return 'left';
+    if (activeAlgorithm === toggleConfig.middle1?.id) return 'middle1';
+    if (activeAlgorithm === toggleConfig.middle2?.id) return 'middle2';
+    if (activeAlgorithm === toggleConfig.middle3?.id) return 'middle3';
+    if (activeAlgorithm === toggleConfig.right?.id) return 'right';
+    return 'left';
+  };
 
-  const handleToggle = () => {
+  const handleToggle = (toggleId: string) => {
     if (!toggleConfig) return;
-    const targetId = isLeftMode ? toggleConfig.right.id : toggleConfig.left.id;
-    setActiveAlgorithm(targetId);
+    let targetId: string | undefined;
+    
+    if (toggleId === 'left') targetId = toggleConfig.left?.id;
+    else if (toggleId === 'middle1') targetId = toggleConfig.middle1?.id;
+    else if (toggleId === 'middle2') targetId = toggleConfig.middle2?.id;
+    else if (toggleId === 'middle3') targetId = toggleConfig.middle3?.id;
+    else if (toggleId === 'right') targetId = toggleConfig.right?.id;
+    
+    if (targetId && ALGORITHMS_CONFIG[targetId]) {
+      setActiveAlgorithm(targetId);
+    }
   };
 
   const handleBackClick = () => {
     if (algorithmsBackRoute) {
-      navigate(algorithmsBackRoute.path);
+      navigate(algorithmsBackRoute.path, { 
+        state: algorithmsBackRoute.state 
+      });
       setAlgorithmsBackRoute(null);
     }
   };
 
-  const handleLinkClick = (link: { type: 'algorithm' | 'helpful' | 'step2'; id: string; label: string }) => {
+  const handleLinkClick = (link: { 
+    type: 'algorithm' | 'helpful' | 'step1' | 'step2' | 'external'; 
+    id: string; 
+    label: string; 
+    url?: string 
+  }) => {
+    if (link.type === 'external' && link.url) {
+      window.open(link.url, '_blank');
+      return;
+    }
+    
     if (link.type === 'helpful') {
       setMaterialsBackRoute({
         path: '/app/step3',
         label: `Назад к «${link.label}»`,
+        state: {
+          activeAlgorithm: activeAlgorithm,
+        },
       });
-      navigate('/app/materials');
+      navigate(`/app/materials?article=${link.id}`);
+    } else if (link.type === 'step1') {
+      setStep1BackRoute({
+        path: '/app/step3',
+        label: `Назад к «${algoTitle}»`,
+        state: {
+          activeAlgorithm: activeAlgorithm,
+        },
+      });
+      navigate('/app/step1');
     } else if (link.type === 'step2') {
       setAlgorithmsBackRoute({
         path: '/app/step3',
         label: 'Назад к алгоритму продажи',
+        state: {
+          activeAlgorithm: activeAlgorithm,
+        },
       });
       navigate('/app/step2');
-    } else {
+    } else if (link.type === 'algorithm') {
       setAlgorithmsBackRoute({
         path: '/app/step3',
         label: `Назад к «${algoTitle}»`,
+        state: {
+          activeAlgorithm: activeAlgorithm,
+        },
       });
       if (ALGORITHMS_CONFIG[link.id]) {
         setActiveAlgorithm(link.id);
@@ -72,10 +152,8 @@ const Step3Page: React.FC = () => {
 
   const totalMainSteps = currentAlgo.filter(step => !step.isSubStep).length;
   const completedMainSteps = currentAlgo.filter(step => !step.isSubStep && currentChecked.includes(step.id)).length;
-
   return (
     <div className="flex h-full">
-      {/* Левое меню */}
       <div className="w-64 shrink-0 bg-white border-r-2 border-border p-4 overflow-y-auto flex flex-col">
         <div className="mb-4">
           <p className="text-sm uppercase tracking-wider text-primary font-bold mb-1">Шаг 3</p>
@@ -170,13 +248,23 @@ const Step3Page: React.FC = () => {
             <AlgorithmToggle
               leftLabel={toggleConfig.left.label}
               rightLabel={toggleConfig.right.label}
-              isActive={isLeftMode}
+              middle1Label={toggleConfig.middle1?.label}
+              middle2Label={toggleConfig.middle2?.label}
+              middle3Label={toggleConfig.middle3?.label}
+              activeId={getActiveToggleId()}
               onToggle={handleToggle}
             />
             <span className="text-sm text-text-muted">
-              {isLeftMode 
-                ? `Сейчас: ${toggleConfig.left.label}` 
-                : `Сейчас: ${toggleConfig.right.label}`}
+              {(() => {
+                const labels: Record<string, string> = {};
+                if (toggleConfig.left) labels.left = toggleConfig.left.label;
+                if (toggleConfig.middle1) labels.middle1 = toggleConfig.middle1.label;
+                if (toggleConfig.middle2) labels.middle2 = toggleConfig.middle2.label;
+                if (toggleConfig.middle3) labels.middle3 = toggleConfig.middle3.label;
+                if (toggleConfig.right) labels.right = toggleConfig.right.label;
+                const activeId = getActiveToggleId();
+                return `Сейчас: ${labels[activeId] || ''}`;
+              })()}
             </span>
           </div>
         )}
@@ -198,7 +286,7 @@ const Step3Page: React.FC = () => {
         <div className="space-y-2">
           {currentAlgo.map((step) => {
             const done = currentChecked.includes(step.id);
-            const isTitle = !step.isSubStep && step.text.includes('Этап');
+            const isTitle = step.id.includes('title');
             
             return (
               <div

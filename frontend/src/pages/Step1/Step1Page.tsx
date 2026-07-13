@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, X, Shield, Globe, Lock, MapPin, HelpCircle, ArrowLeft, ArrowRight, Info } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Search, X, Shield, Globe, Lock, MapPin, HelpCircle, ArrowLeft, ArrowRight, Info, ChevronLeft } from 'lucide-react';
 import AerialMap from '@/components/ui/AerialMap';
 import { PROPERTIES } from '@/data/constants';
 import { useAuthStore } from '@/store/authStore';
@@ -144,8 +144,30 @@ const Step1Page: React.FC = () => {
   const timeoutRef = useRef<number | null>(null);
   const legalTimeoutRef = useRef<number | null>(null);
   const { isAuthenticated } = useAuthStore();
-  const { setMaterialsBackRoute, setAlgorithmsBackRoute } = useNavigationStore();
+  const { 
+    setMaterialsBackRoute, 
+    setAlgorithmsBackRoute,
+    step1BackRoute,
+    setStep1BackRoute 
+  } = useNavigationStore();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state) {
+      const { selectedProperty: savedProperty, searchQuery: savedQuery, clickedPoint: savedPoint } = location.state as {
+        selectedProperty?: Property;
+        searchQuery?: string;
+        clickedPoint?: { x: number; y: number };
+      };
+      if (savedProperty) {
+        setSelectedProperty(savedProperty);
+        setSearchQuery(savedQuery || savedProperty.address);
+        setClickedPoint(savedPoint || { x: savedProperty.x, y: savedProperty.y });
+      }
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     return () => {
@@ -179,11 +201,28 @@ const Step1Page: React.FC = () => {
     }
   };
 
+  const handleBackClick = () => {
+    if (step1BackRoute) {
+      navigate(step1BackRoute.path, { 
+        state: step1BackRoute.state 
+      });
+      setStep1BackRoute(null);
+    }
+  };
+
   const handleLinkClick = (item: any) => {
     if (!item.link) return;
     const route = item.link.type === 'helpful' ? '/app/materials' : '/app/step3';
     const setBackRoute = item.link.type === 'helpful' ? setMaterialsBackRoute : setAlgorithmsBackRoute;
-    setBackRoute({ path: '/app/step1', label: `Назад к «${item.text || item.label}»` });
+    setBackRoute({ 
+      path: '/app/step1', 
+      label: `Назад к «${item.text || item.label}»`,
+      state: {
+        selectedProperty: selectedProperty,
+        searchQuery: searchQuery,
+        clickedPoint: clickedPoint,
+      },
+    });
     navigate(route);
   };
 
@@ -244,7 +283,18 @@ const Step1Page: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Шапка */}
+      {step1BackRoute && (
+        <div className="bg-white border-b-2 border-border p-3 shrink-0">
+          <button
+            onClick={handleBackClick}
+            className="flex items-center gap-2 text-base text-text-secondary hover:text-primary font-medium"
+          >
+            <ChevronLeft className="w-5 h-5" />
+            {step1BackRoute.label}
+          </button>
+        </div>
+      )}
+
       <div className="bg-white border-b-2 border-border p-4 shrink-0">
         <div className="flex items-center gap-4">
           <div className="shrink-0">
