@@ -1,5 +1,0 @@
-flask
-flask-cors
-pydantic
-PyJWT
-email-validator
