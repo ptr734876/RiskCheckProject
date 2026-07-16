@@ -82,7 +82,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
-              placeholder="Минимум 6 символов"
+              placeholder="Минимум 8 символов"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="input-field pr-12 text-base"
@@ -140,7 +140,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
           </label>
 
           <p className="text-sm text-text-muted leading-relaxed pl-8">
-            Нажимая кнопку «зарегестрироваться» я подтверждаю, что ознакомлен с тем, что информация, содержащаяся на сайте носит исключительно справочный характер
+            Нажимая кнопку «зарегистрироваться» я подтверждаю, что ознакомлен с тем, что информация, содержащаяся на сайте носит исключительно справочный характер
           </p>
         </div>
 

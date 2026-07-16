@@ -45,8 +45,7 @@ const Header: React.FC = () => {
               </div>
               <button
                 onClick={() => {
-                  logout();
-                  navigate('/home');
+                  void logout().then(() => navigate('/home'));
                 }}
                 className="btn-ghost text-sm flex items-center gap-2"
               >

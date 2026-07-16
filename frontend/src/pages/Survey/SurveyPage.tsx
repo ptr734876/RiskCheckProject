@@ -3,13 +3,18 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Check, ChevronLeft, ChevronRight, Save, ExternalLink, Building2 } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { useNavigationStore } from '@/store/navigationStore';
-import { SURVEY_STEPS } from '@/data/constants';
+import { surveyApi } from '@/api';
+import { mapSurveyToQuestionnaire } from '@/api/mappers';
+import type { SurveyStep } from '@/types';
 
 const SurveyPage: React.FC = () => {
+  const [steps, setSteps] = useState<SurveyStep[]>([]);
+  const [schemaLoading, setSchemaLoading] = useState(true);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isCompleted, setIsCompleted] = useState(false);
-  
+
   const { setSurveyCompleted, setSurveyFormData } = useAppStore();
   const { setMaterialsBackRoute, setAlgorithmsBackRoute } = useNavigationStore();
   const navigate = useNavigate();
@@ -18,18 +23,53 @@ const SurveyPage: React.FC = () => {
   useEffect(() => {
     if (location.state) {
       const { stepIndex, formData: savedFormData } = location.state as {
-        stepIndex: number;
-        formData: Record<string, string>;
+        stepIndex?: number;
+        formData?: Record<string, string>;
       };
-      setCurrentStepIndex(stepIndex);
-      setFormData(savedFormData);
+      if (typeof stepIndex === 'number') setCurrentStepIndex(stepIndex);
+      if (savedFormData) setFormData(savedFormData);
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
-  const currentStep = SURVEY_STEPS[currentStepIndex];
-  const totalSteps = SURVEY_STEPS.length;
-  const isLastStep = currentStepIndex === totalSteps - 1;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setSchemaLoading(true);
+      setSchemaError(null);
+      try {
+        const schemaRes = await surveyApi.getSchema();
+        if (cancelled) return;
+        const loaded = (schemaRes.data.schema?.steps || []) as SurveyStep[];
+        setSteps(loaded);
+        if (loaded.length === 0) {
+          setSchemaError('Анкета пуста. Выполните flask seed-content.');
+        }
+      } catch {
+        if (!cancelled) setSchemaError('Не удалось загрузить вопросы анкеты');
+      } finally {
+        if (!cancelled) setSchemaLoading(false);
+      }
+
+      try {
+        const { data } = await surveyApi.getData();
+        if (cancelled) return;
+        const answers = data.questionnaire?.answers;
+        if (answers && typeof answers === 'object' && Object.keys(answers).length > 0) {
+          setFormData((prev) => ({ ...answers, ...prev }));
+        }
+      } catch {
+        /* гость или нет сохранённой анкеты */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const currentStep = steps[currentStepIndex];
+  const totalSteps = steps.length;
+  const isLastStep = totalSteps > 0 && currentStepIndex === totalSteps - 1;
 
   const handleInputChange = (questionId: string, value: string) => {
     setFormData((prev) => ({ ...prev, [questionId]: value }));
@@ -68,14 +108,21 @@ const SurveyPage: React.FC = () => {
     if (currentStepIndex > 0) setCurrentStepIndex((prev) => prev - 1);
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     setSurveyFormData(formData);
     setSurveyCompleted(true);
+    try {
+      await surveyApi.submit(mapSurveyToQuestionnaire(formData));
+    } catch {
+    }
     navigate('/app');
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
     setSurveyCompleted(true);
+    try {
+      await surveyApi.submit({ completed: true, current_step: 3 });
+    } catch {    }
     navigate('/app');
   };
 
@@ -97,6 +144,29 @@ const SurveyPage: React.FC = () => {
       navigate(`/app/step3?algorithm=${id}`);
     }
   };
+
+  if (schemaLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-text-muted font-medium">Загрузка анкеты…</p>
+      </div>
+    );
+  }
+
+  if (schemaError || !currentStep) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl border-2 border-border p-8 text-center">
+          <p className="text-base text-text-secondary mb-4">
+            {schemaError || 'Вопросы анкеты не найдены'}
+          </p>
+          <button onClick={() => navigate('/app')} className="btn-primary">
+            На главную
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isCompleted) {
     return (

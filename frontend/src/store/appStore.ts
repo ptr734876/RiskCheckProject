@@ -13,7 +13,9 @@ interface AppState {
   setSurveyCompleted: (completed: boolean) => void;
   setSurveyFormData: (data: Record<string, string>) => void;
   toggleDocument: (docId: string) => void;
+  setCheckedDocuments: (ids: string[]) => void;
   toggleAlgorithmStep: (algorithmId: string, stepId: string) => void;
+  setCheckedAlgorithmSteps: (algorithmId: string, stepIds: string[]) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -35,6 +37,8 @@ export const useAppStore = create<AppState>((set) => ({
       : [...state.checkedDocuments, docId];
     return { checkedDocuments: docs };
   }),
+
+  setCheckedDocuments: (ids) => set({ checkedDocuments: ids }),
   
   toggleAlgorithmStep: (algorithmId, stepId) => set((state) => {
     const currentSteps = state.checkedAlgorithms[algorithmId] || [];
@@ -48,4 +52,11 @@ export const useAppStore = create<AppState>((set) => ({
       },
     };
   }),
+
+  setCheckedAlgorithmSteps: (algorithmId, stepIds) => set((state) => ({
+    checkedAlgorithms: {
+      ...state.checkedAlgorithms,
+      [algorithmId]: stepIds,
+    },
+  })),
 }));

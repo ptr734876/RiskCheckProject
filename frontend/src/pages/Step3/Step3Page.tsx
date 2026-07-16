@@ -4,154 +4,235 @@ import { User, ChevronLeft, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-r
 import { useAuthStore } from '@/store/authStore';
 import { useAppStore } from '@/store/appStore';
 import { useNavigationStore } from '@/store/navigationStore';
-import { ALGORITHMS_CONFIG } from '@/data/constants';
+import { algorithmsApi } from '@/api';
 import AlgorithmToggle from '@/components/ui/AlgorithmToggle';
+import type { AlgorithmGroup, AlgorithmStep } from '@/types';
 
-const ALGORITHM_LIST = [
-  { id: 'general', label: 'Продажа квартиры' },
-  { id: 'encumbrances', label: 'Проверка обременений' },
-];
+type UiStep = AlgorithmStep & { dbId?: number };
 
 const Step3Page: React.FC = () => {
   const [searchParams] = useSearchParams();
   const algorithmParam = searchParams.get('algorithm');
-  
-  const [activeAlgorithm, setActiveAlgorithm] = useState(
-    algorithmParam && ALGORITHMS_CONFIG[algorithmParam] 
-      ? algorithmParam 
-      : 'general'
-  );
-  
+
+  const [groups, setGroups] = useState<AlgorithmGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeGroupId, setActiveGroupId] = useState('');
+  const [activeAlgorithmId, setActiveAlgorithmId] = useState('');
+
   const { isAuthenticated } = useAuthStore();
-  const { checkedAlgorithms, toggleAlgorithmStep } = useAppStore();
-  const { 
-    algorithmsBackRoute, 
-    setAlgorithmsBackRoute, 
-    setMaterialsBackRoute, 
-    setStep1BackRoute 
+  const { checkedAlgorithms, toggleAlgorithmStep, setCheckedAlgorithmSteps } = useAppStore();
+  const {
+    algorithmsBackRoute,
+    setAlgorithmsBackRoute,
+    setMaterialsBackRoute,
+    setStep1BackRoute,
   } = useNavigationStore();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const { data } = await algorithmsApi.getTree();
+        if (cancelled) return;
+        const nextGroups: AlgorithmGroup[] = data.groups || [];
+        setGroups(nextGroups);
+
+        const checked = data.checkedAlgorithms || {};
+        Object.entries(checked).forEach(([code, stepIds]) => {
+          setCheckedAlgorithmSteps(code, stepIds as string[]);
+        });
+
+        let groupId = nextGroups[0]?.id || '';
+        let algoId = nextGroups[0]?.algorithms[0]?.id || '';
+
+        if (algorithmParam) {
+          for (const group of nextGroups) {
+            const found = group.algorithms.find((a) => a.id === algorithmParam);
+            if (found) {
+              groupId = group.id;
+              algoId = algorithmParam;
+              break;
+            }
+          }
+        }
+
+        setActiveGroupId(groupId);
+        setActiveAlgorithmId(algoId);
+      } catch {
+        if (!cancelled) setLoadError('Не удалось загрузить алгоритмы с сервера');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [algorithmParam, setCheckedAlgorithmSteps]);
 
   useEffect(() => {
     if (location.state) {
       const { activeAlgorithm: savedAlgorithm } = location.state as {
         activeAlgorithm?: string;
       };
-      if (savedAlgorithm && ALGORITHMS_CONFIG[savedAlgorithm]) {
-        setActiveAlgorithm(savedAlgorithm);
+      if (savedAlgorithm) {
+        for (const group of groups) {
+          const found = group.algorithms.find((a) => a.id === savedAlgorithm);
+          if (found) {
+            setActiveGroupId(group.id);
+            setActiveAlgorithmId(savedAlgorithm);
+            break;
+          }
+        }
       }
       window.history.replaceState({}, document.title);
     }
-  }, [location.state]);
+  }, [location.state, groups]);
 
-  useEffect(() => {
-    if (algorithmParam && ALGORITHMS_CONFIG[algorithmParam]) {
-      setActiveAlgorithm(algorithmParam);
-    }
-  }, [algorithmParam]);
+  const currentGroup = groups.find((g) => g.id === activeGroupId);
+  const currentAlgorithms = currentGroup?.algorithms || [];
+  const currentConfig = currentAlgorithms.find((a) => a.id === activeAlgorithmId);
+  const currentSteps = (currentConfig?.steps || []) as UiStep[];
+  const currentChecked = checkedAlgorithms[activeAlgorithmId] || [];
 
-  const currentConfig = ALGORITHMS_CONFIG[activeAlgorithm];
-  const currentAlgo = currentConfig?.steps || [];
-  const currentChecked = checkedAlgorithms[activeAlgorithm] || [];
-  
-  const algoTitle = currentConfig?.title || 'Алгоритм';
-  const algoSubtitle = currentConfig?.subtitle || '';
+  const pageTitle = currentConfig?.displayTitle || currentGroup?.title || 'Алгоритм';
+  const pageSubtitle = currentConfig?.subtitle || '';
 
   const hasToggle = !!currentConfig?.toggle;
   const toggleConfig = currentConfig?.toggle;
-  
+
   const getActiveToggleId = () => {
     if (!toggleConfig) return 'left';
-    if (activeAlgorithm === toggleConfig.left?.id) return 'left';
-    if (activeAlgorithm === toggleConfig.middle1?.id) return 'middle1';
-    if (activeAlgorithm === toggleConfig.middle2?.id) return 'middle2';
-    if (activeAlgorithm === toggleConfig.middle3?.id) return 'middle3';
-    if (activeAlgorithm === toggleConfig.right?.id) return 'right';
+    if (activeAlgorithmId === toggleConfig.left?.id) return 'left';
+    if (activeAlgorithmId === toggleConfig.middle1?.id) return 'middle1';
+    if (activeAlgorithmId === toggleConfig.middle2?.id) return 'middle2';
+    if (activeAlgorithmId === toggleConfig.middle3?.id) return 'middle3';
+    if (activeAlgorithmId === toggleConfig.right?.id) return 'right';
     return 'left';
   };
 
   const handleToggle = (toggleId: string) => {
     if (!toggleConfig) return;
     let targetId: string | undefined;
-    
     if (toggleId === 'left') targetId = toggleConfig.left?.id;
     else if (toggleId === 'middle1') targetId = toggleConfig.middle1?.id;
     else if (toggleId === 'middle2') targetId = toggleConfig.middle2?.id;
     else if (toggleId === 'middle3') targetId = toggleConfig.middle3?.id;
     else if (toggleId === 'right') targetId = toggleConfig.right?.id;
-    
-    if (targetId && ALGORITHMS_CONFIG[targetId]) {
-      setActiveAlgorithm(targetId);
-    }
+    if (targetId) setActiveAlgorithmId(targetId);
   };
 
   const handleBackClick = () => {
     if (algorithmsBackRoute) {
-      navigate(algorithmsBackRoute.path, { 
-        state: algorithmsBackRoute.state 
-      });
+      navigate(algorithmsBackRoute.path, { state: algorithmsBackRoute.state });
       setAlgorithmsBackRoute(null);
     }
   };
 
-  const handleLinkClick = (link: { 
-    type: 'algorithm' | 'helpful' | 'step1' | 'step2' | 'external'; 
-    id: string; 
-    label: string; 
-    url?: string 
+  const handleLinkClick = (link: {
+    type: 'algorithm' | 'helpful' | 'step1' | 'step2' | 'external';
+    id: string;
+    label: string;
+    url?: string;
   }) => {
     if (link.type === 'external' && link.url) {
       window.open(link.url, '_blank');
       return;
     }
-    
     if (link.type === 'helpful') {
       setMaterialsBackRoute({
         path: '/app/step3',
-        label: `Назад к «${link.label}»`,
-        state: {
-          activeAlgorithm: activeAlgorithm,
-        },
+        label: `Назад к «${pageTitle}»`,
+        state: { activeAlgorithm: activeAlgorithmId },
       });
-      navigate(`/app/materials?article=${link.id}`);
+      navigate(`/app/materials?article=${encodeURIComponent(link.id)}`);
     } else if (link.type === 'step1') {
       setStep1BackRoute({
         path: '/app/step3',
-        label: `Назад к «${algoTitle}»`,
-        state: {
-          activeAlgorithm: activeAlgorithm,
-        },
+        label: `Назад к «${pageTitle}»`,
+        state: { activeAlgorithm: activeAlgorithmId },
       });
       navigate('/app/step1');
     } else if (link.type === 'step2') {
       setAlgorithmsBackRoute({
         path: '/app/step3',
         label: 'Назад к алгоритму продажи',
-        state: {
-          activeAlgorithm: activeAlgorithm,
-        },
+        state: { activeAlgorithm: activeAlgorithmId },
       });
       navigate('/app/step2');
-    } else if (link.type === 'algorithm') {
+    } else if (link.type === 'algorithm' && link.id) {
       setAlgorithmsBackRoute({
         path: '/app/step3',
-        label: `Назад к «${algoTitle}»`,
-        state: {
-          activeAlgorithm: activeAlgorithm,
-        },
+        label: `Назад к «${pageTitle}»`,
+        state: { activeAlgorithm: activeAlgorithmId },
       });
-      if (ALGORITHMS_CONFIG[link.id]) {
-        setActiveAlgorithm(link.id);
+      for (const group of groups) {
+        const found = group.algorithms.find((a) => a.id === link.id);
+        if (found) {
+          setActiveGroupId(group.id);
+          setActiveAlgorithmId(link.id);
+          break;
+        }
       }
+    }
+  };
+
+  const handleToggleStep = async (step: UiStep) => {
+    if (isAuthenticated && step.dbId != null) {
+      try {
+        await algorithmsApi.toggleStep(step.dbId);
+      } catch {
+        return;
+      }
+    }
+    toggleAlgorithmStep(activeAlgorithmId, step.id);
+  };
+
+  const handleGroupClick = (groupId: string) => {
+    const group = groups.find((g) => g.id === groupId);
+    if (group && group.algorithms.length > 0) {
+      setActiveGroupId(groupId);
+      setActiveAlgorithmId(group.algorithms[0].id);
     }
   };
 
   const handlePrevStep = () => navigate('/app/step2');
   const handleNextStep = () => navigate('/app/materials');
 
-  const totalMainSteps = currentAlgo.filter(step => !step.isSubStep).length;
-  const completedMainSteps = currentAlgo.filter(step => !step.isSubStep && currentChecked.includes(step.id)).length;
+  const totalMainSteps = currentSteps.filter((step) => !step.isSubStep).length;
+  const completedMainSteps = currentSteps.filter(
+    (step) => !step.isSubStep && currentChecked.includes(step.id)
+  ).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-text-muted font-medium">Загрузка алгоритмов…</p>
+      </div>
+    );
+  }
+
+  if (loadError || groups.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="max-w-md rounded-xl border-2 border-red-200 bg-red-50 p-6 text-center">
+          <p className="text-red-700 font-medium mb-2">
+            {loadError || 'Алгоритмы не найдены'}
+          </p>
+          <p className="text-sm text-red-600">
+            Добавьте JSON в{' '}
+            <code className="bg-red-100 px-1 rounded">frontend/public/algorithms/</code> и выполните{' '}
+            <code className="bg-red-100 px-1 rounded">flask seed-content</code>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full">
       <div className="w-64 shrink-0 bg-white border-r-2 border-border p-4 overflow-y-auto flex flex-col">
@@ -161,25 +242,30 @@ const Step3Page: React.FC = () => {
         </div>
 
         <div className="space-y-1 flex-1">
-          {ALGORITHM_LIST.map((item) => {
-            const config = ALGORITHMS_CONFIG[item.id];
-            const checkedCount = (checkedAlgorithms[item.id] || []).length;
-            const totalCount = (config?.steps || []).filter(step => !step.isSubStep).length;
+          {groups.map((group) => {
+            const isGroupActive = group.id === activeGroupId;
+            const totalChecked = group.algorithms.reduce((sum, alg) => {
+              return sum + (checkedAlgorithms[alg.id] || []).length;
+            }, 0);
+            const totalSteps = group.algorithms.reduce((sum, alg) => {
+              return sum + alg.steps.filter((step) => !step.isSubStep).length;
+            }, 0);
+
             return (
               <button
-                key={item.id}
-                onClick={() => setActiveAlgorithm(item.id)}
+                key={group.id}
+                onClick={() => handleGroupClick(group.id)}
                 className={`w-full text-left px-4 py-3 rounded-xl text-base transition-all duration-200 ${
-                  activeAlgorithm === item.id
+                  isGroupActive
                     ? 'bg-primary/10 text-primary border-2 border-primary/30 shadow-md'
                     : 'text-text-secondary hover:bg-slate-50 border-2 border-transparent'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">{config?.title || item.label}</span>
-                  {checkedCount > 0 && (
+                  <span className="font-medium">{group.title}</span>
+                  {totalChecked > 0 && (
                     <span className="text-xs text-violet-600 font-bold">
-                      {checkedCount}/{totalCount}
+                      {totalChecked}/{totalSteps}
                     </span>
                   )}
                 </div>
@@ -222,9 +308,9 @@ const Step3Page: React.FC = () => {
         <div className="mb-4">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-bold font-display text-text-primary">{algoTitle}</h2>
-              {algoSubtitle && (
-                <p className="text-sm text-text-muted mt-0.5">{algoSubtitle}</p>
+              <h2 className="text-2xl font-bold font-display text-text-primary">{pageTitle}</h2>
+              {pageSubtitle && (
+                <p className="text-sm text-text-muted mt-0.5">{pageSubtitle}</p>
               )}
             </div>
             <div className="flex items-center gap-3 mt-1">
@@ -254,18 +340,6 @@ const Step3Page: React.FC = () => {
               activeId={getActiveToggleId()}
               onToggle={handleToggle}
             />
-            <span className="text-sm text-text-muted">
-              {(() => {
-                const labels: Record<string, string> = {};
-                if (toggleConfig.left) labels.left = toggleConfig.left.label;
-                if (toggleConfig.middle1) labels.middle1 = toggleConfig.middle1.label;
-                if (toggleConfig.middle2) labels.middle2 = toggleConfig.middle2.label;
-                if (toggleConfig.middle3) labels.middle3 = toggleConfig.middle3.label;
-                if (toggleConfig.right) labels.right = toggleConfig.right.label;
-                const activeId = getActiveToggleId();
-                return `Сейчас: ${labels[activeId] || ''}`;
-              })()}
-            </span>
           </div>
         )}
 
@@ -284,15 +358,15 @@ const Step3Page: React.FC = () => {
         )}
 
         <div className="space-y-2">
-          {currentAlgo.map((step) => {
+          {currentSteps.map((step) => {
             const done = currentChecked.includes(step.id);
             const isTitle = step.id.includes('title');
-            
+
             return (
               <div
                 key={step.id}
                 className={`flex flex-col gap-1 p-4 rounded-xl border-2 transition-all ${
-                  isTitle 
+                  isTitle
                     ? 'border-primary/30 bg-primary/5'
                     : done
                       ? 'border-violet-300 bg-violet-50'
@@ -302,7 +376,7 @@ const Step3Page: React.FC = () => {
                 <div className="flex items-start gap-4">
                   {!isTitle && (
                     <button
-                      onClick={() => toggleAlgorithmStep(activeAlgorithm, step.id)}
+                      onClick={() => void handleToggleStep(step)}
                       className="shrink-0 mt-1"
                     >
                       <div
@@ -311,32 +385,44 @@ const Step3Page: React.FC = () => {
                         }`}
                       >
                         {done && (
-                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          <svg
+                            className="w-3 h-3 text-white"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={3}
+                              d="M5 13l4 4L19 7"
+                            />
                           </svg>
                         )}
                       </div>
                     </button>
                   )}
                   {isTitle && <div className="w-5 shrink-0" />}
-                  
+
                   <div className="flex-1">
                     <span
                       className={`${
-                        isTitle 
+                        isTitle
                           ? 'text-lg font-bold text-primary'
                           : `text-base ${done ? 'text-text-muted line-through' : 'text-text-primary'}`
                       } leading-relaxed`}
                     >
                       {step.text}
                     </span>
-                    
+
                     {step.description && (
-                      <p className={`text-sm ${isTitle ? 'text-text-secondary' : 'text-text-muted'} mt-1 ${done ? 'opacity-70' : ''}`}>
+                      <p
+                        className={`text-sm ${isTitle ? 'text-text-secondary' : 'text-text-muted'} mt-1 ${done ? 'opacity-70' : ''}`}
+                      >
                         {step.description}
                       </p>
                     )}
-                    
+
                     {step.link && (
                       <button
                         onClick={() => handleLinkClick(step.link!)}

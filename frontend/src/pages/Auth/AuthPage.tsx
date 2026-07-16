@@ -25,8 +25,8 @@ const AuthPage: React.FC = () => {
     } catch (err) {}
   };
 
-  const handleGuest = () => {
-    loginAsGuest();
+  const handleGuest = async () => {
+    await loginAsGuest();
     navigate('/app');
   };
 

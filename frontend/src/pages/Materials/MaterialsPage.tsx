@@ -1,47 +1,95 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Lightbulb, ChevronLeft, ExternalLink, ArrowLeft } from 'lucide-react';
+import { Lightbulb, ChevronLeft, ArrowLeft } from 'lucide-react';
 import { useNavigationStore } from '@/store/navigationStore';
-import { HELPFUL_ARTICLES } from '@/data/constants';
+import { useArticles } from '@/hooks/useArticles';
+import DocxArticleViewer from '@/components/articles/DocxArticleViewer';
 
 const MaterialsPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const articleId = searchParams.get('article');
-  
-  const [selectedArticleId, setSelectedArticleId] = useState(
-    articleId && HELPFUL_ARTICLES.some(a => a.id === articleId) 
-      ? articleId 
-      : HELPFUL_ARTICLES[0]?.id || ''
-  );
-  
+
+  const { articles, loading, error } = useArticles();
+  const [selectedArticleId, setSelectedArticleId] = useState('');
+
   const { materialsBackRoute, setMaterialsBackRoute } = useNavigationStore();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (articleId && HELPFUL_ARTICLES.some(a => a.id === articleId)) {
-      setSelectedArticleId(articleId);
+    if (articles.length === 0) return;
+
+    const validId =
+      articleId && articles.some((a) => a.id === articleId)
+        ? articleId
+        : articles[0].id;
+
+    setSelectedArticleId(validId);
+  }, [articleId, articles]);
+
+  const selectedArticle = articles.find((a) => a.id === selectedArticleId);
+
+  const handleSelectArticle = (id: string) => {
+    setSelectedArticleId(id);
+    setSearchParams({ article: id }, { replace: true });
+  };
+
+  const handleBackClick = () => {
+    if (materialsBackRoute) {
+      navigate(materialsBackRoute.path, {
+        state: materialsBackRoute.state,
+      });
+      setMaterialsBackRoute(null);
     }
-  }, [articleId]);
-
-  const selectedArticle = HELPFUL_ARTICLES.find((a) => a.id === selectedArticleId) || HELPFUL_ARTICLES[0];
-
-const handleBackClick = () => {
-  if (materialsBackRoute) {
-    navigate(materialsBackRoute.path, { 
-      state: materialsBackRoute.state 
-    });
-    setMaterialsBackRoute(null);
-  }
-};
+  };
 
   const handlePrevStep = () => {
     navigate('/app/step3');
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-text-muted font-medium">Загрузка материалов…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="max-w-md rounded-xl border-2 border-red-200 bg-red-50 p-6 text-center">
+          <p className="text-red-700 font-medium mb-2">{error}</p>
+          <p className="text-sm text-red-600">
+            Не удалось загрузить статьи с сервера. Проверьте бэкенд и{' '}
+            <code className="bg-red-100 px-1 rounded">flask seed-content</code>
+            {' '}(docx в <code className="bg-red-100 px-1 rounded">frontend/public/articles/</code>).
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (articles.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="max-w-md rounded-xl border-2 border-border bg-white p-8 text-center">
+          <Lightbulb className="w-12 h-12 text-text-muted mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-text-primary mb-2">Нет материалов</h2>
+          <p className="text-text-secondary font-medium">
+            Добавьте .docx в{' '}
+            <code className="bg-slate-100 px-1 rounded">frontend/public/articles/</code>{' '}
+            и выполните{' '}
+            <code className="bg-slate-100 px-1 rounded">flask --app run.py seed-content</code>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!selectedArticle) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-text-muted">Нет доступных материалов</p>
+        <p className="text-text-muted">Статья не найдена</p>
       </div>
     );
   }
@@ -53,12 +101,12 @@ const handleBackClick = () => {
           <p className="text-sm uppercase tracking-wider text-primary font-bold mb-1">Материалы</p>
           <p className="text-base text-text-secondary font-medium">Полезные статьи</p>
         </div>
-        
+
         <div className="space-y-1 flex-1">
-          {HELPFUL_ARTICLES.map((article) => (
+          {articles.map((article) => (
             <button
               key={article.id}
-              onClick={() => setSelectedArticleId(article.id)}
+              onClick={() => handleSelectArticle(article.id)}
               className={`w-full text-left px-4 py-3 rounded-xl text-base transition-all duration-200 ${
                 selectedArticleId === article.id
                   ? 'bg-primary/10 text-primary border-2 border-primary/30 shadow-md'
@@ -97,15 +145,12 @@ const handleBackClick = () => {
           </div>
         )}
 
-        <div className="max-w-3xl">
-          <div className="mb-6">
-            <h2 className="text-3xl font-bold font-display text-text-primary mb-1">
-              {selectedArticle.title}
-            </h2>
-            <p className="text-lg text-text-secondary font-medium">
+        <div className="max-w-4xl">
+          {selectedArticle.description && (
+            <p className="text-lg text-text-secondary font-medium mb-6">
               {selectedArticle.description}
             </p>
-          </div>
+          )}
 
           {selectedArticle.keyPoints.length > 0 && (
             <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 mb-6">
@@ -123,13 +168,7 @@ const handleBackClick = () => {
             </div>
           )}
 
-          <div className="prose max-w-none">
-            {selectedArticle.content.map((paragraph, idx) => (
-              <p key={idx} className="text-base text-text-primary font-medium leading-relaxed mb-4">
-                {paragraph}
-              </p>
-            ))}
-          </div>
+          <DocxArticleViewer fileUrl={selectedArticle.fileUrl} />
         </div>
       </div>
     </div>

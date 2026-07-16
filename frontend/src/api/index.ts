@@ -6,60 +6,73 @@ const api = axios.create({
   withCredentials: true,
 });
 
-api.interceptors.request.use((config) => {
-  return config;
-});
-
 export const authApi = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
   register: (fullName: string, email: string, password: string) =>
-    api.post('/auth/register', { full_name: fullName, email, password }), 
+    api.post('/auth/register', { full_name: fullName, email, password }),
   logout: () => api.post('/auth/logout'),
-  getCurrentUser: () => api.get('/auth/me'), 
-  guestLogin: () => api.post('/auth/guest'), 
+  getCurrentUser: () => api.get('/auth/me'),
+  guestLogin: () => api.post('/auth/guest'),
 };
 
 export const propertiesApi = {
   getAll: () => api.get('/properties'),
   getById: (id: number) => api.get(`/properties/${id}`),
-  search: (query: string) => api.get('/properties', { params: { q: query } }), 
+  search: (query: string) => api.get('/properties', { params: { q: query } }),
+  lookup: (query: string) => api.get('/properties/lookup', { params: { q: query } }),
+};
+
+export const risksApi = {
+  getForProperty: (propertyId: number) =>
+    api.get(`/risks/property/${propertyId}`),
 };
 
 export const documentsApi = {
-  getRequired: () => api.get('/documents'), 
-  toggleDocument: (documentId: string) => 
+  getAll: () => api.get('/documents'),
+  getSources: () => api.get('/documents/sources'),
+  toggleDocument: (documentId: number) =>
     api.post(`/documents/${documentId}/toggle`),
 };
 
 export const algorithmsApi = {
   getAll: () => api.get('/algorithms'),
-  getOne: (algorithmId: string) => 
-    api.get(`/algorithms/${algorithmId}`),
-  toggleStep: (stepId: string) => 
+  getTree: () => api.get('/algorithms/tree'),
+  getOne: (algorithmId: number) => api.get(`/algorithms/${algorithmId}`),
+  getByCode: (code: string) => api.get(`/algorithms/by-code/${code}`),
+  toggleStep: (stepId: number) =>
     api.post(`/algorithms/steps/${stepId}/toggle`),
 };
 
-export const helpfulApi = {
-  getAll: (params?: { q?: string; category?: string }) => 
+export const materialsApi = {
+  getAll: (params?: { q?: string; category?: string }) =>
     api.get('/materials', { params }),
-  getById: (id: string) => 
-    api.get(`/materials/${id}`),
+  getById: (id: number) => api.get(`/materials/${id}`),
+  getBySlug: (slug: string) => api.get(`/materials/by-slug/${slug}`),
+  fileUrl: (id: number) => `/api/materials/${id}/file`,
 };
+export const helpfulApi = materialsApi;
 
-export const mfcApi = {
-
-  getPropertyMarkers: (propertyId: number) => 
+export const mapApi = {
+  search: (query: string) => api.get('/map/search', { params: { q: query } }),
+  getPropertyContext: (propertyId: number) =>
+    api.get(`/map/property/${propertyId}`),
+  getMarkers: (propertyId: number) =>
     api.get(`/map/property/${propertyId}/markers`),
-  getDocumentPoints: () => 
-    api.get('/map/document-points'), 
+  getPlaceCategories: (propertyId?: number) =>
+    api.get('/map/document-points', {
+      params: propertyId != null ? { property_id: propertyId } : undefined,
+    }),
+  lookup: (query: string) => api.get('/map/lookup', { params: { q: query } }),
 };
+
+export const mfcApi = mapApi;
 
 export const surveyApi = {
-  getSteps: () => api.get('/questionnaire'),
-  submit: (formData: Record<string, string>) => 
-    api.put('/questionnaire', formData), 
-  getData: () => api.get('/questionnaire'), 
+  getSchema: () => api.get('/questionnaire/schema'),
+  getData: () => api.get('/questionnaire'),
+  submit: (payload: Record<string, unknown>) =>
+    api.put('/questionnaire', payload),
 };
 
 export default api;

@@ -7,28 +7,28 @@ const HomePage: React.FC = () => {
   const { isAuthenticated, user, loginAsGuest } = useAuthStore();
   const navigate = useNavigate();
 
-  const ensureAccess = (): boolean => {
+  const ensureAccess = async (): Promise<boolean> => {
     if (isAuthenticated || user?.isGuest) return true;
-    loginAsGuest();
+    await loginAsGuest();
     return true;
   };
 
-  const handleFeatureClick = (path: string) => {
-    ensureAccess();
+  const handleFeatureClick = async (path: string) => {
+    await ensureAccess();
     navigate(path);
   };
 
-  const handleGetStarted = () => {
-    ensureAccess();
+  const handleGetStarted = async () => {
+    await ensureAccess();
     navigate('/app');
   };
 
   const steps = [
     {
       icon: Shield,
-      title: 'Шаг 1',
-      subtitle: 'Карта объектов',
-      description: 'Анализ территории и объекта',
+      title: 'Карта объектов',
+      subtitle: 'Анализ территории и объекта',
+      description: '',
       color: 'text-blue-600',
       bg: 'bg-blue-50',
       border: 'border-blue-200',
@@ -36,9 +36,9 @@ const HomePage: React.FC = () => {
     },
     {
       icon: FileText,
-      title: 'Шаг 2',
-      subtitle: 'Комплект документов',
-      description: 'Все необходимые документы для совершения сделки',
+      title: 'Комплект документов',
+      subtitle: 'Все необходимые документы для совершения сделки',
+      description: '',
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
       border: 'border-emerald-200',
@@ -46,9 +46,9 @@ const HomePage: React.FC = () => {
     },
     {
       icon: BookOpen,
-      title: 'Шаг 3',
-      subtitle: 'Пошаговые инструкции',
-      description: 'Все этапы и действия для продажи недвижимости',
+      title: 'Пошаговые инструкции',
+      subtitle: 'Все этапы и действия для продажи недвижимости',
+      description: '',
       color: 'text-violet-600',
       bg: 'bg-violet-50',
       border: 'border-violet-200',
@@ -59,13 +59,11 @@ const HomePage: React.FC = () => {
   const benefits = [
     'Персональный комплект документов под ваш объект',
     'Индивидуальные алгоритмы и инструкции',
-    'Эксклюзивные данные на карте',
     'Рекомендации по вашей ситуации',
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-blue-50 flex flex-col">
-      {/* Navigation */}
       <nav className="bg-white/95 backdrop-blur-sm border-b-2 border-border shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -98,19 +96,17 @@ const HomePage: React.FC = () => {
       <div className="flex-1 flex items-center">
         <div className="max-w-7xl mx-auto px-6 w-full py-8">
           <div className="text-center mb-10">
-            <h1 className="text-4xl md:text-5xl font-bold font-display leading-tight">
+            <h1 className="text-3xl md:text-4xl font-bold font-display leading-tight">
               <span className="text-text-primary">Продажа недвижимости</span>
               <br />
               <span className="text-primary">проще, чем кажется</span>
             </h1>
-            
-            <div className="mt-4 max-w-3xl mx-auto">
-              <p className="text-lg md:text-xl text-text-secondary">
-                Аналитика, карта объектов, документы, алгоритмы и полезные материалы
+            <div className="mt-3 max-w-3xl mx-auto">
+              <p className="text-base md:text-lg text-text-secondary">
+                Аналитика, карта объектов, документы, алгоритмы и полезные материалы — всё{' '}
               </p>
               <p className="text-lg md:text-xl text-text-secondary mt-1">
-                — всё{' '}
-                <span className="text-primary/90 font-semibold">
+                <span className="text-primary font-bold tracking-wide">
                   в Атласе продаж
                 </span>
               </p>
@@ -157,7 +153,6 @@ const HomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Steps Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             {steps.map((step, i) => (
               <button
@@ -184,7 +179,6 @@ const HomePage: React.FC = () => {
             ))}
           </div>
 
-          {/* Журнал — увеличенная заметная кнопка */}
           <div className="flex justify-center">
             <button
               onClick={() => handleFeatureClick('/app/materials')}

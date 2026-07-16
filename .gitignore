@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project
+riskcheck.db
+frontend/node_modules/
+frontend/dist/
+/backend
+main-pages
+tests
+docs
+package-lock.json
+frontend/.DS_Store

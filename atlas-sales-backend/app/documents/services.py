@@ -1,27 +1,52 @@
-
 from app.extensions import db
 from app.models import Document
 
-BASE_CODES = {"egrn_extract","owner_passport","bti_plan","utilities_debt_certificate"}
 
-def selected_document_codes(user=None):
-    codes = set(BASE_CODES)
+def _answers_from_user(user):
     if user is None or user.questionnaire is None:
-        return codes
+        return {}
     q = user.questionnaire
+    answers = dict(q.answers_json or {})
     if q.owners_count == "multiple":
-        codes.add("all_owners_documents")
+        answers.setdefault("ownersCount", "2+")
+    elif q.owners_count == "one":
+        answers.setdefault("ownersCount", "1")
     if q.maternity_capital is True:
-        codes.update({"maternity_capital_documents","children_share_confirmation"})
+        answers.setdefault("maternityCapital", "yes")
+    elif q.maternity_capital is False:
+        answers.setdefault("maternityCapital", "no")
     if q.redevelopment == "unauthorized":
-        codes.add("redevelopment_approval_documents")
-    if q.property_type == "house":
-        codes.add("land_plot_documents")
-    if q.property_type == "commercial":
-        codes.add("commercial_title_documents")
-    return codes
+        answers.setdefault("redevelopment", "yes")
+    elif q.redevelopment == "none":
+        answers.setdefault("redevelopment", "no")
+    if q.property_type == "apartment":
+        answers.setdefault("propertyType", "apartment_house")
+    elif q.property_type == "house":
+        answers.setdefault("propertyType", "land")
+    elif q.property_type == "commercial":
+        answers.setdefault("propertyType", "commercial")
+    return answers
+
+
+def document_matches_conditions(doc: Document, answers: dict) -> bool:
+    conditions = doc.conditions_json
+    if not conditions:
+        return True
+    if not answers:
+        return False
+    for rule in conditions:
+        qid = rule.get("questionId")
+        expected = rule.get("value")
+        if qid is None:
+            continue
+        if answers.get(qid) != expected:
+            return False
+    return True
+
 
 def get_selected_documents(user=None):
-    codes = selected_document_codes(user)
-    stmt = db.select(Document).where(Document.code.in_(codes)).order_by(Document.id)
-    return db.session.scalars(stmt).all()
+    answers = _answers_from_user(user)
+    all_docs = db.session.scalars(
+        db.select(Document).order_by(Document.sort_order, Document.id)
+    ).all()
+    return [d for d in all_docs if document_matches_conditions(d, answers)]
