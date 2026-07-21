@@ -40,12 +40,13 @@ const SurveyPage: React.FC = () => {
       try {
         const schemaRes = await surveyApi.getSchema();
         if (cancelled) return;
-        const loaded = (schemaRes.data.schema?.steps || []) as SurveyStep[];
+        const loaded = (schemaRes.data?.schema?.steps || []) as SurveyStep[];
         setSteps(loaded);
         if (loaded.length === 0) {
           setSchemaError('Анкета пуста. Выполните flask seed-content.');
         }
-      } catch {
+      } catch (error) {
+        console.error('Ошибка загрузки схемы:', error);
         if (!cancelled) setSchemaError('Не удалось загрузить вопросы анкеты');
       } finally {
         if (!cancelled) setSchemaLoading(false);
@@ -58,8 +59,8 @@ const SurveyPage: React.FC = () => {
         if (answers && typeof answers === 'object' && Object.keys(answers).length > 0) {
           setFormData((prev) => ({ ...answers, ...prev }));
         }
-      } catch {
-        /* гость или нет сохранённой анкеты */
+      } catch (error) {
+        console.error('Ошибка загрузки данных:', error);
       }
     })();
     return () => {
@@ -67,12 +68,13 @@ const SurveyPage: React.FC = () => {
     };
   }, []);
 
-  const currentStep = steps[currentStepIndex];
+  const currentStep = steps && steps.length > 0 ? steps[currentStepIndex] : null;
   const totalSteps = steps.length;
   const isLastStep = totalSteps > 0 && currentStepIndex === totalSteps - 1;
 
-  const handleInputChange = (questionId: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [questionId]: value }));
+  const getVisibleQuestions = () => {
+    if (!currentStep || !currentStep.questions) return [];
+    return currentStep.questions.filter(shouldShowQuestion);
   };
 
   const shouldShowQuestion = (question: any) => {
@@ -81,9 +83,12 @@ const SurveyPage: React.FC = () => {
     return formData[questionId] === value;
   };
 
-  const visibleQuestions = currentStep.questions.filter(shouldShowQuestion);
-
+  const visibleQuestions = getVisibleQuestions();
   const hasVisibleQuestions = visibleQuestions.length > 0;
+
+  const handleInputChange = (questionId: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [questionId]: value }));
+  };
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +118,8 @@ const SurveyPage: React.FC = () => {
     setSurveyCompleted(true);
     try {
       await surveyApi.submit(mapSurveyToQuestionnaire(formData));
-    } catch {
+    } catch (error) {
+      console.error('Ошибка отправки:', error);
     }
     navigate('/app');
   };
@@ -122,7 +128,9 @@ const SurveyPage: React.FC = () => {
     setSurveyCompleted(true);
     try {
       await surveyApi.submit({ completed: true, current_step: 3 });
-    } catch {    }
+    } catch (error) {
+      console.error('Ошибка пропуска:', error);
+    }
     navigate('/app');
   };
 
@@ -153,13 +161,37 @@ const SurveyPage: React.FC = () => {
     );
   }
 
-  if (schemaError || !currentStep) {
+  if (schemaError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-2xl border-2 border-border p-8 text-center">
-          <p className="text-base text-text-secondary mb-4">
-            {schemaError || 'Вопросы анкеты не найдены'}
-          </p>
+          <p className="text-base text-text-secondary mb-4">{schemaError}</p>
+          <button onClick={() => navigate('/app')} className="btn-primary">
+            На главную
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!steps || steps.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl border-2 border-border p-8 text-center">
+          <p className="text-base text-text-secondary mb-4">Вопросы анкеты не найдены</p>
+          <button onClick={() => navigate('/app')} className="btn-primary">
+            На главную
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentStep) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl border-2 border-border p-8 text-center">
+          <p className="text-base text-text-secondary mb-4">Текущий шаг не найден</p>
           <button onClick={() => navigate('/app')} className="btn-primary">
             На главную
           </button>
@@ -185,7 +217,7 @@ const SurveyPage: React.FC = () => {
               Теперь вам доступны персональные рекомендации.
             </p>
             <button onClick={handleComplete} className="btn-primary w-full text-base">
-              Перейти к рекомендациям
+              Последний шаг: выбрать свой объект.
             </button>
           </div>
         </div>

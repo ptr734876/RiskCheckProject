@@ -5,7 +5,7 @@
     "Удостоверяет личность продавца недвижимости и всех собственников.",
     "Внутренний документ: есть у вас на руках."
   ],
-  "required": true,
+  "required": false,
   "sourceId": "on_hand",
   "algorithmId": null,
   "articleId": null,

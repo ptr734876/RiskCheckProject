@@ -207,10 +207,10 @@ const Step2Page: React.FC = () => {
             <User className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
             <div>
               <p className="text-base font-semibold text-text-primary">
-                Персональный список документов
+                Настройте подборку под себя
               </p>
               <p className="text-base text-text-secondary mt-1">
-                Зарегистрируйтесь для получения персональной подборки.
+                Зарегистрируйтесь, чтобы видеть только актуальные для вас документы и управлять списком.
               </p>
             </div>
           </div>
@@ -219,11 +219,16 @@ const Step2Page: React.FC = () => {
         <div className="space-y-8">
           {documentGroups.map(({ source, docs }) => (
             <section key={source.id} className="relative">
-              <div className="flex items-center justify-between gap-3 mb-3 pb-2 border-b-2 border-border">
-                <div>
+              <div className="flex items-start justify-between gap-3 mb-3 pb-2 border-b-2 border-border">
+                <div className="flex-1">
                   <h3 className="text-sm uppercase tracking-wider text-primary font-bold">
                     {source.title}
                   </h3>
+                  {source.downloadHeader && (
+                    <p className="text-sm text-text-muted mt-1 leading-relaxed">
+                      {source.downloadHeader}
+                    </p>
+                  )}
                   <p className="text-sm text-text-muted mt-0.5">
                     {docs.length}{' '}
                     {docs.length === 1 ? 'документ' : docs.length < 5 ? 'документа' : 'документов'}
@@ -300,7 +305,7 @@ const Step2Page: React.FC = () => {
                             <button
                               onClick={() =>
                                 navigateTo(
-                                  `/app/step3?algorithm=${encodeURIComponent(doc.algorithmId!)}`,
+                                  `/app/step3?algorithm=${doc.algorithmId!}`,
                                   doc.title,
                                   'algorithms'
                                 )
@@ -314,7 +319,7 @@ const Step2Page: React.FC = () => {
                             <button
                               onClick={() =>
                                 navigateTo(
-                                  `/app/materials?article=${encodeURIComponent(doc.articleId!)}`,
+                                  `/app/materials?article=${doc.articleId!}`,
                                   doc.title,
                                   'materials'
                                 )

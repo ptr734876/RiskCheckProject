@@ -348,10 +348,10 @@ const Step3Page: React.FC = () => {
             <User className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
             <div>
               <p className="text-base font-semibold text-text-primary">
-                Персональный список алгоритмов
+                Настройте подборку под себя
               </p>
               <p className="text-base text-text-secondary mt-1">
-                Зарегистрируйтесь для получения персональной подборки.
+                Зарегистрируйтесь, чтобы видеть только актуальные для вас документы и управлять списком.
               </p>
             </div>
           </div>

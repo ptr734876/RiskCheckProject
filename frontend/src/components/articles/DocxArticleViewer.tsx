@@ -48,6 +48,22 @@ const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({ fileUrl, classNam
           renderFootnotes: true,
           renderEndnotes: true,
         });
+
+        const tables = bodyContainer.querySelectorAll('table');
+        tables.forEach((table) => {
+          (table as HTMLElement).style.width = '100%';
+          (table as HTMLElement).style.maxWidth = '100%';
+          (table as HTMLElement).style.tableLayout = 'fixed';
+          (table as HTMLElement).style.wordWrap = 'break-word';
+          
+          const cells = table.querySelectorAll('td, th');
+          cells.forEach((cell) => {
+            (cell as HTMLElement).style.wordWrap = 'break-word';
+            (cell as HTMLElement).style.overflowWrap = 'break-word';
+            (cell as HTMLElement).style.maxWidth = '300px';
+          });
+        });
+
       } catch (err) {
         if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
         setError(err instanceof Error ? err.message : 'Ошибка загрузки документа');
@@ -76,7 +92,6 @@ const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({ fileUrl, classNam
           <p className="text-text-secondary font-medium">Загрузка документа…</p>
         </div>
       )}
-      {/* Контейнеры всегда в DOM — иначе после ошибки refs не монтируются и смена статьи не грузится */}
       <div ref={styleRef} aria-hidden="true" className={error ? 'hidden' : undefined} />
       <div
         ref={bodyRef}

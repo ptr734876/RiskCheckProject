@@ -194,11 +194,11 @@
   "toggle": {
     "left": {
       "id": "general",
-      "label": "Квартира"
+      "label": "Жилой фонд"
     },
     "right": {
       "id": "commercial",
-      "label": "Коммерческая"
+      "label": "Нежилой фонд"
     }
   }
 }

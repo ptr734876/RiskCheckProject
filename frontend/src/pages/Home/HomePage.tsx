@@ -103,13 +103,11 @@ const HomePage: React.FC = () => {
             </h1>
             <div className="mt-3 max-w-3xl mx-auto">
               <p className="text-base md:text-lg text-text-secondary">
-                Аналитика, карта объектов, документы, алгоритмы и полезные материалы — всё{' '}
+                  Мы собрали для вас документы и инструкции в единую систему. Разобраться в нюансах сделки проще, когда всё необходимое есть{' '}
               </p>
-              <p className="text-lg md:text-xl text-text-secondary mt-1">
-                <span className="text-primary font-bold tracking-wide">
-                  в Атласе продаж
-                </span>
-              </p>
+              <h1 className="text-3xl md:text-4xl font-bold font-display leading-tight">
+              <span className="text-primary">в Атласе продаж</span>
+            </h1>
             </div>
           </div>
 
@@ -196,6 +194,34 @@ const HomePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <footer className="border-t border-gray-200 bg-white/50 backdrop-blur-sm mt-auto">
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-gray-400" strokeWidth={1.5} />
+              <span className="text-sm font-medium text-gray-600">Атлас продаж</span>
+              <span className="text-xs text-gray-300">•</span>
+              <span className="text-xs text-gray-400">{new Date().getFullYear()}</span>
+            </div>
+            
+            <div className="text-center max-w-2xl">
+              <p className="text-xs text-gray-400 leading-relaxed">
+                <span className="font-medium text-gray-500">Внимание:</span> Вся информация, представленная на сайте, 
+                носит исключительно справочный и информационный характер и не является публичной офертой. 
+                Данные могут быть неактуальными — рекомендуем проверять актуальность информации в официальных источниках. 
+                За достоверность предоставленных сведений мы не несём ответственности.
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-3 text-xs text-gray-400">
+              <a href="#" className="hover:text-gray-600 transition-colors"></a>
+              <span>•</span>
+              <a href="#" className="hover:text-gray-600 transition-colors"></a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

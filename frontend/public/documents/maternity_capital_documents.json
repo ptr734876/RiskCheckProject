@@ -4,7 +4,7 @@
   "note": [
     "Нужны для проверки обстоятельств приобретения объекта с материнским капиталом."
   ],
-  "required": true,
+  "required": false,
   "sourceId": "on_hand",
   "algorithmId": null,
   "articleId": null,

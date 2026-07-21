@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Lightbulb, ChevronLeft, ArrowLeft } from 'lucide-react';
+import { Lightbulb, ChevronLeft, ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useNavigationStore } from '@/store/navigationStore';
 import { useArticles } from '@/hooks/useArticles';
 import DocxArticleViewer from '@/components/articles/DocxArticleViewer';
@@ -167,6 +167,25 @@ const MaterialsPage: React.FC = () => {
               </ul>
             </div>
           )}
+
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-5 mb-6 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5">
+                <Shield className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-blue-900 font-medium leading-relaxed">
+                  Материал соответствует законодательству РФ на дату публикации.
+                </p>
+                <div className="flex items-start gap-2 mt-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-800 leading-relaxed">
+                    Перед совершением сделки сверяйтесь с актуальным законодательством и при необходимости обратитесь за квалифицированной юридической помощью.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <DocxArticleViewer fileUrl={selectedArticle.fileUrl} />
         </div>

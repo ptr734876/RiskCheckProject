@@ -5,8 +5,8 @@
     "Подтверждает, что в квартире никто не прописан, или показывает список всех зарегистрированных лиц.",
     "В паспортном столе, Управляющей компании (УК), МФЦ или через Госуслуги."
   ],
-  "required": true,
-  "sourceId": "passport_office",
+  "required": false,
+  "sourceId": "mfc",
   "algorithmId": null,
   "articleId": null,
   "conditions": null,

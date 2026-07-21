@@ -7,8 +7,8 @@
     "Офлайн: в любом МФЦ (занимает до 5 рабочих дней).",
     "Выписка должна быть свежей (обычно не старше 30 дней)."
   ],
-  "required": true,
-  "sourceId": "mfc_gosuslugi",
+  "required": false,
+  "sourceId": "mfc",
   "algorithmId": "encumbrances",
   "articleId": null,
   "conditions": null,

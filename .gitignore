@@ -220,7 +220,7 @@ __marimo__/
 # Project
 riskcheck.db
 frontend/node_modules/
-frontend/dist/
+
 /backend
 main-pages
 tests

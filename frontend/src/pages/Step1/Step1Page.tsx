@@ -161,7 +161,7 @@ const SurroundingItemCard: React.FC<{
             onClick={() => onLinkClick(item)}
             className="text-sm text-primary font-bold hover:text-primary-dark transition-colors inline-flex items-center gap-1 bg-white border-2 border-primary/30 rounded-lg px-3 py-2"
           >
-            Перейти к рекомендациям <ArrowLeft className="w-4 h-4 rotate-180" />
+            Последний шаг: выбрать вашу недвижимость <ArrowLeft className="w-4 h-4 rotate-180" />
           </button>
         )}
       </Tooltip>
@@ -295,7 +295,6 @@ const Step1Page: React.FC = () => {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
