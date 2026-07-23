@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import MainLayout from './components/layout/MainLayout';
+import { pruneCache } from './utils/geoCache';
 import HomePage from './pages/Home/HomePage';
 import AuthPage from './pages/Auth/AuthPage';
 import SurveyPage from './pages/Survey/SurveyPage';
@@ -15,6 +16,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     void bootstrap();
+    // Убираем просроченные записи геокэша, чтобы localStorage
+    // не разрастался между сессиями.
+    pruneCache();
   }, [bootstrap]);
 
   if (isBootstrapping) {

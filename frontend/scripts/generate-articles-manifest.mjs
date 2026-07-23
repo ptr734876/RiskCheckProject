@@ -78,32 +78,47 @@ async function buildManifest() {
   const articles = [];
 
   for (const fileName of docxFiles) {
-    const id = path.basename(fileName, '.docx');
-    const docxPath = path.join(ARTICLES_DIR, fileName);
-    const sidecar = readSidecarMeta(id);
-    const extracted = await extractFromDocx(docxPath);
+    // Каждая статья обрабатывается изолированно: одна проблемная
+    // (например, со слишком длинным именем после распаковки архива)
+    // не должна ронять сборку всего манифеста.
+    try {
+      const id = path.basename(fileName, '.docx');
+      const docxPath = path.join(ARTICLES_DIR, fileName);
+      const sidecar = readSidecarMeta(id);
+      const extracted = await extractFromDocx(docxPath);
 
-    const title = sidecar?.title ?? humanizeId(id);
-    const description = sidecar?.description ?? extracted.description;
-    const links = sidecar?.links ?? extracted.links;
-    
-    let contentFile = null;
-    if (extracted.contentLines.length > 0) {
-      const contentPath = path.join(ARTICLES_DIR, `${id}.content.txt`);
-      fs.writeFileSync(contentPath, extracted.contentLines.join('\n'), 'utf-8');
-      contentFile = `${id}.content.txt`;
+      const title = sidecar?.title ?? humanizeId(id);
+      const description = sidecar?.description ?? extracted.description;
+      const links = sidecar?.links ?? extracted.links;
+
+      let contentFile = null;
+      if (extracted.contentLines.length > 0) {
+        const contentPath = path.join(ARTICLES_DIR, `${id}.content.txt`);
+        try {
+          fs.writeFileSync(contentPath, extracted.contentLines.join('\n'), 'utf-8');
+          contentFile = `${id}.content.txt`;
+        } catch (err) {
+          // ENAMETOOLONG и подобное: статья всё равно попадёт
+          // в манифест, просто без предизвлечённого текста.
+          console.warn(
+            `[articles] Не удалось сохранить текст для "${fileName}": ${err.message}`
+          );
+        }
+      }
+
+      articles.push({
+        id,
+        title,
+        description,
+        keyPoints: sidecar?.keyPoints ?? [],
+        fileName,
+        order: sidecar?.order ?? 999,
+        links,
+        contentFile,
+      });
+    } catch (err) {
+      console.warn(`[articles] Статья "${fileName}" пропущена: ${err.message}`);
     }
-
-    articles.push({
-      id,
-      title,
-      description,
-      keyPoints: sidecar?.keyPoints ?? [],
-      fileName,
-      order: sidecar?.order ?? 999,
-      links,
-      contentFile,
-    });
   }
 
   articles.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, 'ru'));

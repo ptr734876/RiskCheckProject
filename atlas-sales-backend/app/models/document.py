@@ -16,8 +16,6 @@ class Document(db.Model):
     source_id = db.Column(db.String(80), nullable=False, default="on_hand")
     algorithm_id = db.Column(db.String(80))
     article_id = db.Column(db.String(80))
-    # null / [] = всегда показывать; иначе список условий AND по ответам анкеты
-    # [{ "questionId": "maternityCapital", "value": "yes" }, ...]
     conditions_json = db.Column(db.JSON)
     sort_order = db.Column(db.Integer, nullable=False, default=1)
 

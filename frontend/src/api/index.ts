@@ -64,6 +64,15 @@ export const mapApi = {
       params: propertyId != null ? { property_id: propertyId } : undefined,
     }),
   lookup: (query: string) => api.get('/map/lookup', { params: { q: query } }),
+  /** Поиск произвольного адреса: Яндекс.Геокодер + окружение из OpenStreetMap. */
+  geoLookup: (query: string, coords?: { lat: number; lon: number }) =>
+    api.get('/map/geo-lookup', {
+      params: coords ? { q: query, lat: coords.lat, lon: coords.lon } : { q: query },
+    }),
+  getConfig: () => api.get('/map/config'),
+  /** Ближайшие МФЦ и офисы Росреестра по координатам объекта. */
+  getOffices: (lat: number, lon: number, radius?: number) =>
+    api.get('/map/offices', { params: { lat, lon, radius } }),
 };
 
 export const mfcApi = mapApi;

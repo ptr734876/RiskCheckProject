@@ -105,7 +105,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await authApi.logout();
     } catch {
-      // локальный выход всё равно выполняем
     }
     set({ user: null, isAuthenticated: false, error: null });
   },

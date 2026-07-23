@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export interface MapMarker {
   type: string;
@@ -21,11 +21,14 @@ interface MapViewProps {
   selected?: boolean;
   clickedPoint?: { x: number; y: number } | null;
   onMapClick?: (x: number, y: number) => void;
+  onGeoClick?: (lat: number, lon: number) => void;
+  radiusM?: number;
   onReady?: () => void;
 }
 
 export const MAP_WIDTH = 480;
 export const MAP_HEIGHT = 260;
+
 
 export function projectToMap(
   lat: number,
@@ -41,150 +44,229 @@ export function projectToMap(
   };
 }
 
+const KIND_PRESET: Record<string, string> = {
+  metro: 'islands#nightDotIcon',
+  school: 'islands#blueEducationIcon',
+  kindergarten: 'islands#greenDotIcon',
+  park: 'islands#darkGreenDotIcon',
+  big_road: 'islands#orangeAutoIcon',
+  railway: 'islands#grayDotIcon',
+  industrial_zone: 'islands#brownFactoryIcon',
+  cemetery: 'islands#blackDotIcon',
+};
+
+const DEFAULT_PRESET_PLUS = 'islands#greenDotIcon';
+const DEFAULT_PRESET_MINUS = 'islands#redDotIcon';
+
+let scriptPromise: Promise<void> | null = null;
+
+
+function loadYandexMaps(apiKey: string): Promise<void> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
+
+  const w = window as any;
+  if (w.ymaps && w.ymaps.Map) return Promise.resolve();
+
+  if (scriptPromise) return scriptPromise;
+
+  scriptPromise = new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script');
+    const keyPart = apiKey ? `apikey=${encodeURIComponent(apiKey)}&` : '';
+    script.src = `https://api-maps.yandex.ru/2.1/?${keyPart}lang=ru_RU`;
+    script.async = true;
+    script.onload = () => {
+      const ymaps = (window as any).ymaps;
+      if (!ymaps) {
+        reject(new Error('ymaps не загрузился'));
+        return;
+      }
+      ymaps.ready(() => resolve());
+    };
+    script.onerror = () => reject(new Error('Не удалось загрузить API Яндекс.Карт'));
+    document.head.appendChild(script);
+  });
+
+  return scriptPromise;
+}
+
 const MapView: React.FC<MapViewProps> = ({
   center,
   markers = [],
   selected,
-  clickedPoint,
-  onMapClick,
+  onGeoClick,
+  radiusM = 3000,
   onReady,
 }) => {
-  React.useEffect(() => {
-    onReady?.();
-  }, [onReady]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const objectsRef = useRef<any>(null);
+  const circleRef = useRef<any>(null);
 
-  const propertyMarkers = markers.filter((m) => m.type === 'property');
-  const nearby = markers.filter((m) => m.type !== 'property');
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
-  const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!onMapClick) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * MAP_WIDTH;
-    const y = ((e.clientY - rect.top) / rect.height) * MAP_HEIGHT;
-    onMapClick(x, y);
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/map/config');
+        const data = await res.json();
+        if (!cancelled) setApiKey(data.yandex_js_api_key || '');
+      } catch {
+        if (!cancelled) setApiKey('');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const selectedPin =
-    center && propertyMarkers[0]?.latitude != null && propertyMarkers[0]?.longitude != null
-      ? projectToMap(propertyMarkers[0].latitude, propertyMarkers[0].longitude, center)
-      : selected && center
-        ? { x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 }
-        : null;
+  useEffect(() => {
+    if (apiKey === null || !containerRef.current || mapRef.current) return;
+
+    let cancelled = false;
+
+    loadYandexMaps(apiKey)
+      .then(() => {
+        if (cancelled || !containerRef.current || mapRef.current) return;
+        const ymaps = (window as any).ymaps;
+
+        const map = new ymaps.Map(
+          containerRef.current,
+          {
+            center: center
+              ? [center.latitude, center.longitude]
+              : [55.7558, 37.6176],
+            zoom: center ? 14 : 10,
+            controls: ['zoomControl', 'geolocationControl'],
+          },
+          { suppressMapOpenBlock: true }
+        );
+
+        const collection = new ymaps.GeoObjectCollection();
+        map.geoObjects.add(collection);
+
+        if (onGeoClick) {
+          map.events.add('click', (e: any) => {
+            const coords = e.get('coords');
+            onGeoClick(coords[0], coords[1]);
+          });
+        }
+
+        mapRef.current = map;
+        objectsRef.current = collection;
+        setReady(true);
+        onReady?.();
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message || 'Ошибка загрузки карты');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey]);
+
+  useEffect(() => {
+    if (!ready || !mapRef.current || !objectsRef.current) return;
+
+    const ymaps = (window as any).ymaps;
+    const map = mapRef.current;
+    const collection = objectsRef.current;
+
+    collection.removeAll();
+
+    if (circleRef.current) {
+      map.geoObjects.remove(circleRef.current);
+      circleRef.current = null;
+    }
+
+    const property = markers.find((m) => m.type === 'property');
+    const nearby = markers.filter((m) => m.type !== 'property');
+
+    if (selected && center) {
+      const circle = new ymaps.Circle(
+        [[center.latitude, center.longitude], radiusM],
+        {},
+        {
+          fillColor: '#4F46E51A',
+          strokeColor: '#4F46E5',
+          strokeWidth: 2,
+          strokeStyle: 'shortdash',
+        }
+      );
+      map.geoObjects.add(circle);
+      circleRef.current = circle;
+    }
+
+    nearby.forEach((m) => {
+      if (m.latitude == null || m.longitude == null) return;
+      const isPlus = m.type === 'positive' || m.type === 'plus';
+      const preset =
+        (m.kind && KIND_PRESET[m.kind]) ||
+        (isPlus ? DEFAULT_PRESET_PLUS : DEFAULT_PRESET_MINUS);
+
+      collection.add(
+        new ymaps.Placemark(
+          [m.latitude, m.longitude],
+          {
+            balloonContentHeader: m.label,
+            balloonContentBody:
+              m.distance_m != null ? `${m.distance_m} м от объекта` : '',
+          },
+          { preset }
+        )
+      );
+    });
+
+    if (property && property.latitude != null && property.longitude != null) {
+      collection.add(
+        new ymaps.Placemark(
+          [property.latitude, property.longitude],
+          { balloonContentHeader: property.label, iconCaption: property.label },
+          { preset: 'islands#redHomeIcon', zIndex: 1000 }
+        )
+      );
+    }
+
+    if (center) {
+      map.setCenter([center.latitude, center.longitude], selected ? 14 : 11, {
+        duration: 300,
+      });
+    }
+  }, [ready, markers, center, selected, radiusM]);
+
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.destroy();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
+  if (error) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-slate-100 text-center p-4">
+        <div>
+          <p className="text-sm text-text-secondary font-medium">{error}</p>
+          <p className="text-xs text-text-muted mt-1">
+            Проверьте ключ YANDEX_JS_API_KEY в настройках сервера
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full">
-      <svg
-        viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
-        xmlns="http://www.w3.org/2000/svg"
-        className={`w-full h-full ${onMapClick ? 'cursor-crosshair' : ''}`}
-        aria-label="Карта"
-        onClick={handleSvgClick}
-      >
-        <rect width={MAP_WIDTH} height={MAP_HEIGHT} fill="#2C2C30" />
-
-        <rect x="0" y="108" width={MAP_WIDTH} height="18" fill="#363638" />
-        <rect x="0" y="46" width={MAP_WIDTH} height="12" fill="#363638" />
-        <rect x="0" y="200" width={MAP_WIDTH} height="14" fill="#363638" />
-        <rect x="118" y="0" width="14" height={MAP_HEIGHT} fill="#363638" />
-        <rect x="240" y="0" width="18" height={MAP_HEIGHT} fill="#363638" />
-        <rect x="370" y="0" width="12" height={MAP_HEIGHT} fill="#363638" />
-        <rect x="60" y="58" width="8" height="140" fill="#343434" />
-        <rect x="180" y="0" width="8" height="108" fill="#343434" />
-        <rect x="310" y="58" width="8" height="140" fill="#343434" />
-
-        <rect x="6" y="6" width="50" height="38" rx="1" fill="#484848" />
-        <rect x="62" y="6" width="22" height="38" rx="1" fill="#3E3E3E" />
-        <rect x="6" y="58" width="50" height="46" rx="1" fill="#424242" />
-        <rect x="62" y="58" width="22" height="22" rx="1" fill="#3A3A3A" />
-        <rect x="62" y="84" width="22" height="20" rx="1" fill="#464646" />
-        <rect x="136" y="6" width="36" height="38" rx="1" fill="#474747" />
-        <rect x="176" y="6" width="28" height="38" rx="1" fill="#3D3D3D" />
-        <rect x="136" y="58" width="100" height="46" rx="1" fill="#404040" />
-        <rect x="262" y="6" width="54" height="38" rx="1" fill="#444444" />
-        <rect x="322" y="6" width="44" height="38" rx="1" fill="#3C3C3C" />
-        <rect x="386" y="6" width="88" height="38" rx="1" fill="#484848" />
-        <rect x="262" y="58" width="44" height="46" rx="1" fill="#3F3F3F" />
-        <rect x="320" y="58" width="46" height="22" rx="1" fill="#434343" />
-        <rect x="386" y="58" width="88" height="46" rx="1" fill="#414141" />
-        <rect x="6" y="130" width="50" height="66" rx="1" fill="#464646" />
-        <rect x="62" y="130" width="22" height="30" rx="1" fill="#3B3B3B" />
-        <rect x="62" y="164" width="22" height="32" rx="1" fill="#434343" />
-        <rect x="136" y="130" width="100" height="66" rx="1" fill="#404040" />
-        <rect x="262" y="130" width="104" height="32" rx="1" fill="#444444" />
-        <rect x="262" y="166" width="44" height="30" rx="1" fill="#3E3E3E" />
-        <rect x="320" y="166" width="46" height="30" rx="1" fill="#464646" />
-        <rect x="386" y="130" width="88" height="66" rx="1" fill="#424242" />
-        <rect x="6" y="218" width="50" height="36" rx="1" fill="#3D3D3D" />
-        <rect x="62" y="218" width="50" height="36" rx="1" fill="#434343" />
-        <rect x="136" y="218" width="100" height="36" rx="1" fill="#404040" />
-        <rect x="262" y="218" width="104" height="36" rx="1" fill="#444444" />
-        <rect x="386" y="218" width="88" height="36" rx="1" fill="#3C3C3C" />
-
-        <path
-          d="M0 242 Q60 234 140 238 Q220 242 300 236 Q380 230 480 238 L480 260 L0 260 Z"
-          fill="#1A3050"
-          opacity="0.9"
-        />
-        <rect x="6" y="202" width="50" height="14" rx="1" fill="#2A4A22" opacity="0.9" />
-        <rect x="136" y="202" width="46" height="14" rx="1" fill="#2A4A22" opacity="0.8" />
-
-        {center &&
-          nearby.map((m, i) => {
-            if (m.latitude == null || m.longitude == null) return null;
-            const p = projectToMap(m.latitude, m.longitude, center);
-            const isPlus = m.type === 'positive' || m.type === 'plus';
-            return (
-              <g key={`${m.label}-${i}`} transform={`translate(${p.x}, ${p.y})`}>
-                <circle
-                  cx="0"
-                  cy="0"
-                  r="4"
-                  fill={isPlus ? '#3D9A5F' : '#C45C4A'}
-                  stroke="#0C0C10"
-                  strokeWidth="1"
-                  opacity="0.9"
-                />
-              </g>
-            );
-          })}
-
-        {center &&
-          propertyMarkers.map((m, i) => {
-            if (m.latitude == null || m.longitude == null) return null;
-            const p = projectToMap(m.latitude, m.longitude, center);
-            const isActive =
-              selected &&
-              selectedPin &&
-              Math.abs(p.x - selectedPin.x) < 1 &&
-              Math.abs(p.y - selectedPin.y) < 1;
-            if (isActive) return null;
-            return (
-              <g key={`prop-${m.propertyId ?? i}`} transform={`translate(${p.x}, ${p.y})`}>
-                <circle cx="0" cy="0" r="5" fill="#D4A030" stroke="#A87A20" strokeWidth="1.5" />
-              </g>
-            );
-          })}
-
-        {selectedPin && selected && (
-          <g transform={`translate(${selectedPin.x}, ${selectedPin.y})`}>
-            <circle cx="0" cy="0" r="14" fill="#D4A030" opacity="0.15" />
-            <circle cx="0" cy="0" r="6" fill="#D4A030" stroke="#A87A20" strokeWidth="2" />
-            <circle cx="0" cy="0" r="2.5" fill="#0C0C10" />
-            <circle cx="0" cy="0" r="14" fill="none" stroke="#D4A030" strokeWidth="1" opacity="0.3">
-              <animate attributeName="r" from="10" to="20" dur="1.5s" repeatCount="indefinite" />
-              <animate attributeName="opacity" from="0.4" to="0" dur="1.5s" repeatCount="indefinite" />
-            </circle>
-          </g>
-        )}
-
-        {clickedPoint && !selected && (
-          <g transform={`translate(${clickedPoint.x}, ${clickedPoint.y})`}>
-            <circle cx="0" cy="0" r="14" fill="#D4A030" opacity="0.15" />
-            <circle cx="0" cy="0" r="6" fill="#D4A030" stroke="#A87A20" strokeWidth="2" />
-            <circle cx="0" cy="0" r="2.5" fill="#0C0C10" />
-          </g>
-        )}
-      </svg>
+      <div ref={containerRef} className="w-full h-full" />
+      {!ready && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
+          <p className="text-sm text-text-muted">Загрузка карты…</p>
+        </div>
+      )}
     </div>
   );
 };

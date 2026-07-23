@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import json
 from datetime import datetime
@@ -7,6 +8,25 @@ from pydantic import BaseModel
 import uvicorn
 from playwright.async_api import async_playwright
 from contextlib import asynccontextmanager
+
+def _env_ms(name: str, default: int) -> int:
+    """Таймаут из переменной окружения, в миллисекундах."""
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+NAV_TIMEOUT = _env_ms("PARSER_NAV_TIMEOUT", 60000)  
+UI_TIMEOUT = _env_ms("PARSER_UI_TIMEOUT", 20000)    
+RESULT_TIMEOUT = _env_ms("PARSER_RESULT_TIMEOUT", 25000) 
+
+NAV_RETRIES = int(os.getenv("PARSER_NAV_RETRIES", "2"))
+
+CADASTRAL_RE = re.compile(r'\b\d{1,2}:\d{1,2}:\d{5,7}:\d{1,10}\b')
+
+CADASTRAL_RE_LOOSE = re.compile(r'\b\d{1,2}:\d{1,2}:\d{5,7}(?::\d{1,10})?\b')
+
 
 class CoordinatesRequest(BaseModel):
     latitude: float
@@ -19,6 +39,22 @@ class PlotResponse(BaseModel):
     fields_count: int
     timestamp: str
 
+def extract_cadastral_number(text: str) -> str | None:
+
+    if not text:
+        return None
+
+    match = CADASTRAL_RE.search(text)
+    if match:
+        return match.group(0)
+
+    match = CADASTRAL_RE_LOOSE.search(text)
+    if match:
+        return match.group(0)
+
+    return None
+
+
 class RosreestrParser:
     def __init__(self):
         self.base_url = "https://nspd.gov.ru/map?thematic=PKK&coordinate_x=4221015.012247635&coordinate_y=7574181.562236419&zoom=11.630095020104767&baseLayerId=235&theme_id=1&is_copy_url=true&active_layers=36048"
@@ -27,6 +63,7 @@ class RosreestrParser:
         self.lock = asyncio.Lock()
         self.page_pool = []
         self.max_pages = 3
+        self.last_error = None
         
     async def init_browser(self):
         self.playwright = await async_playwright().start()
@@ -65,13 +102,36 @@ class RosreestrParser:
         await context.close()
             
     async def load_page(self, page):
-        try:
-            await page.goto(self.base_url, timeout=10000, wait_until='domcontentloaded')
-            await page.wait_for_selector('m-button.coordinate-search', timeout=5000)
-            return True
-        except Exception as e:
-            print(f"Error loading page: {e}")
-            return False
+   
+        last_error = None
+
+        for attempt in range(1, NAV_RETRIES + 1):
+            try:
+                await page.goto(
+                    self.base_url,
+                    timeout=NAV_TIMEOUT,
+                    wait_until='domcontentloaded'
+                )
+                await page.wait_for_selector(
+                    'm-button.coordinate-search',
+                    timeout=UI_TIMEOUT
+                )
+                return True
+            except Exception as e:
+                last_error = e
+                print(
+                    f"Попытка {attempt}/{NAV_RETRIES}: страница НСПД "
+                    f"не загрузилась ({type(e).__name__})"
+                )
+                if attempt < NAV_RETRIES:
+                    await asyncio.sleep(2)
+
+        print(f"Error loading page: {last_error}")
+        self.last_error = (
+            "Сайт nspd.gov.ru не отвечает или загружается слишком долго. "
+            "Проверьте, открывается ли https://nspd.gov.ru/map в браузере."
+        )
+        return False
             
     async def close_banner(self, page):
         try:
@@ -92,7 +152,7 @@ class RosreestrParser:
                 
             if search_button and await search_button.is_visible():
                 await search_button.click()
-                await page.wait_for_selector('#latitude', timeout=2000)
+                await page.wait_for_selector('#latitude', timeout=UI_TIMEOUT)
                 return True
             return False
         except Exception as e:
@@ -121,7 +181,7 @@ class RosreestrParser:
             find_button = await page.query_selector('button:has-text("Найти")')
             if find_button and await find_button.is_visible():
                 await find_button.click()
-                await page.wait_for_selector('.accordion-item.clickable', timeout=5000)
+                await page.wait_for_selector('.accordion-item.clickable', timeout=RESULT_TIMEOUT)
                 return True
             return False
         except Exception as e:
@@ -134,12 +194,18 @@ class RosreestrParser:
             if not plot_element:
                 return None
                 
-            plot_text = await plot_element.text_content()
-            cadastral_number = re.search(r'[\d:]+', plot_text)
-            cadastral_number = cadastral_number.group(0) if cadastral_number else None
-            
+            plot_text = await plot_element.text_content() or ''
+
+            cadastral_number = extract_cadastral_number(plot_text)
+
+            if not cadastral_number:
+                print(
+                    "Не удалось разобрать кадастровый номер из текста: "
+                    f"{plot_text.strip()[:120]!r}"
+                )
+
             await plot_element.click()
-            await page.wait_for_selector('.info-container', timeout=5000)
+            await page.wait_for_selector('.info-container', timeout=RESULT_TIMEOUT)
             
             return cadastral_number
         except Exception as e:
@@ -200,25 +266,39 @@ class RosreestrParser:
         async with self.lock:
             context = None
             page = None
+            self.last_error = None
             try:
                 context, page = await self.create_context_and_page()
-                
+
                 if not await self.load_page(page):
                     return None
-                    
+
                 await self.close_banner(page)
-                
+
                 if not await self.open_search_form(page):
+                    self.last_error = (
+                        "Не найдена форма поиска по координатам — "
+                        "возможно, изменилась вёрстка сайта НСПД."
+                    )
                     return None
-                    
+
                 if not await self.enter_coordinates(page, lat, lon):
+                    self.last_error = "Не удалось ввести координаты в форму."
                     return None
-                    
+
                 if not await self.click_find(page):
+                    self.last_error = (
+                        "Поиск не дал результатов: по этим координатам "
+                        "участок не найден либо сайт не ответил."
+                    )
                     return None
-                    
+
                 cadastral_number = await self.select_first_plot(page)
                 if not cadastral_number:
+                    self.last_error = (
+                        "Участок по этим координатам не найден "
+                        "в публичной кадастровой карте."
+                    )
                     return None
                     
                 info = await self.extract_plot_info(page)
@@ -261,9 +341,15 @@ async def parse_coordinates(request: CoordinatesRequest):
         result = await parser.parse_plot(request.latitude, request.longitude)
         
         if not result:
+            reason = getattr(parser, "last_error", None)
+            # 404 — участка нет; 503 — проблема с самим сайтом НСПД.
+            # Клиенту важно различать эти случаи.
+            is_site_problem = bool(reason and (
+                "не отвечает" in reason or "вёрстка" in reason
+            ))
             raise HTTPException(
-                status_code=404,
-                detail="Plot not found or error during parsing"
+                status_code=503 if is_site_problem else 404,
+                detail=reason or "Участок не найден"
             )
             
         return result

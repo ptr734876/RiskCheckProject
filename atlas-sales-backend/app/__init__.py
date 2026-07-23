@@ -45,4 +45,13 @@ def create_app(config_object=None):
 
     from app.cli import register_cli
     register_cli(app)
+
+    # Автозапуск парсера Росреестра как дочернего процесса.
+    # Не критичен: если парсер не поднимется, сайт работает без
+    # юридических данных. В тестах не нужен.
+    if not app.config.get("TESTING"):
+        from app.geo.parser_supervisor import init_app as init_parser
+
+        init_parser(app)
+
     return app

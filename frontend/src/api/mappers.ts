@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { resolveSurroundingHint } from '@/data/hints';
 import type {
   AlgorithmGroup,
   DocumentItem,
@@ -93,20 +94,22 @@ export function mapBackendSurrounding(raw: {
   link?: { type: 'helpful' | 'algorithm'; id: string } | null;
 }): SurroundingItem {
   const isPlus = raw.type === 'plus' || raw.category === 'positive';
+  const type = isPlus ? 'plus' : 'minus';
+  const distance = formatDistance(raw.distance_m);
+
+  const hint = resolveSurroundingHint(
+    raw.kind,
+    type,
+    { name: raw.name, distance },
+    { impact: raw.impact, tip: raw.tip, link: raw.link }
+  );
+
   return {
-    text: `${raw.name} — ${formatDistance(raw.distance_m)}`,
-    type: isPlus ? 'plus' : 'minus',
-    impact:
-      raw.impact ||
-      (isPlus
-        ? 'Положительный фактор окружения, повышающий привлекательность объекта.'
-        : 'Фактор окружения, который стоит учитывать при оценке и продаже.'),
-    tip:
-      raw.tip ||
-      (isPlus
-        ? 'Отметьте этот плюс в объявлении и на показах.'
-        : 'Будьте готовы честно ответить на вопросы покупателя.'),
-    link: raw.link ?? null,
+    text: `${raw.name} — ${distance}`,
+    type,
+    impact: hint.impact,
+    tip: hint.tip,
+    link: hint.link,
   };
 }
 

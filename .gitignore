@@ -228,3 +228,4 @@ docs
 package-lock.json
 frontend/.DS_Store
 node_modules/
+.env

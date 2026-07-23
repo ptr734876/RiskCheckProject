@@ -13,7 +13,6 @@ class QuestionnaireResponse(db.Model):
     sale_urgency = db.Column(db.String(30))
     current_step = db.Column(db.Integer, nullable=False, default=1)
     completed = db.Column(db.Boolean, nullable=False, default=False)
-    # Полные ответы анкеты с фронта: { questionId: value, ... }
     answers_json = db.Column(db.JSON)
     user = db.relationship("User", back_populates="questionnaire")
 

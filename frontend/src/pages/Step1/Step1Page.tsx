@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Info,
   ChevronLeft,
+  RefreshCw,
 } from 'lucide-react';
 import MapView, {
   projectToMap,
@@ -23,7 +24,14 @@ import {
   mapBackendSurrounding,
 } from '@/api/mappers';
 import { useNavigationStore } from '@/store/navigationStore';
+import { useAppStore } from '@/store/appStore';
+import { readCache, writeCache } from '@/utils/geoCache';
 import type { Property, SurroundingItem as SurroundingItemData } from '@/types';
+import {
+  resolveLegalHint,
+  resolveSurroundingHint,
+  LEGAL_UNAVAILABLE,
+} from '@/data/hints';
 
 interface OverviewPin {
   id: number;
@@ -169,6 +177,69 @@ const SurroundingItemCard: React.FC<{
   );
 };
 
+const EXTERNAL_DASH = '—';
+
+const LEGAL_FIELDS: Array<{ key: string; label: string }> = [
+  { key: 'cadastral_number', label: 'Кадастровый номер' },
+  { key: 'area', label: 'Площадь объекта' },
+  { key: 'land_category', label: 'Категория земель' },
+  { key: 'permitted_use', label: 'Разрешённое использование' },
+  { key: 'ownership_type', label: 'Форма собственности' },
+  { key: 'status', label: 'Статус записи в ЕГРН' },
+  { key: 'cost', label: 'Кадастровая стоимость' },
+  { key: 'encumbrances', label: 'Обременения и ограничения' },
+];
+
+function buildExternalProperty(
+  address: string,
+  center: MapCenter,
+  surroundings: SurroundingItemData[],
+  cadastral?: Record<string, any> | null
+): Property {
+  const publicItems = LEGAL_FIELDS.map(({ key, label }) => {
+    const value = cadastral?.[key];
+    const hasValue = value != null && String(value).trim() !== '';
+    const hint = resolveLegalHint(key, hasValue ? String(value) : null, {
+      unavailable: !hasValue,
+    });
+
+    return {
+      label,
+      value: hasValue ? String(value) : EXTERNAL_DASH,
+      impact: hint.impact,
+      tip: hint.tip,
+      link: hint.link ?? null,
+    };
+  });
+
+  const extraItems = Object.entries(cadastral?.extra || {}).map(
+    ([label, value]) => ({
+      label,
+      value: String(value),
+      impact: LEGAL_UNAVAILABLE.impact,
+      tip: 'Поле получено из публичной кадастровой карты. Сверьте с выпиской ЕГРН.',
+      link: null,
+    })
+  );
+
+  const areaValue = cadastral?.area ? String(cadastral.area) : EXTERNAL_DASH;
+
+  return {
+    id: -1,
+    address,
+    latitude: center.latitude,
+    longitude: center.longitude,
+    type: cadastral?.permitted_use ? String(cadastral.permitted_use) : 'Не определён',
+    area: areaValue,
+    source: cadastral ? 'rosreestr_parser' : 'external',
+    legal: {
+      public: [...publicItems, ...extraItems],
+      private: [],
+    },
+    surroundings,
+  } as unknown as Property;
+}
+
 const Step1Page: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -185,6 +256,10 @@ const Step1Page: React.FC = () => {
   } | null>(null);
   const [isTooltipHovered, setIsTooltipHovered] = useState(false);
   const [searchedEmpty, setSearchedEmpty] = useState(false);
+  const [geoFailed, setGeoFailed] = useState<string[]>([]);
+  const [radiusM, setRadiusM] = useState(3000);
+  const [cadastralError, setCadastralError] = useState<string | null>(null);
+  const [cadastralMessage, setCadastralMessage] = useState<string | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const legalTimeoutRef = useRef<number | null>(null);
   const {
@@ -195,6 +270,7 @@ const Step1Page: React.FC = () => {
   } = useNavigationStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
 
   const showOverview = (pins: OverviewPin[], center: MapCenter) => {
     setMapCenter(center);
@@ -237,6 +313,13 @@ const Step1Page: React.FC = () => {
       setSearchQuery(addressHint || property.address);
       setMapCenter(center);
       setMapMarkers(markers);
+      if (center.latitude && center.longitude) {
+        setSelectedLocation({
+          address: property.address,
+          latitude: center.latitude,
+          longitude: center.longitude,
+        });
+      }
       if (center.latitude && center.longitude) {
         const pin = projectToMap(center.latitude, center.longitude, center);
         setClickedPoint(pin);
@@ -336,25 +419,98 @@ const Step1Page: React.FC = () => {
     };
   }, []);
 
-  const applyLookup = async (query: string) => {
+  
+  const applyLookup = async (
+    query: string,
+    coords?: { lat: number; lon: number },
+    options?: { force?: boolean }
+  ) => {
     setLoading(true);
     setLoadError(null);
     setSearchedEmpty(false);
+    setGeoFailed([]);
     try {
-      const { data } = await mapApi.lookup(query);
-      const mapItems = data.map?.items || [];
-      const propRaw = data.property;
-      const propertyId = propRaw?.id ?? propRaw?.property_id ?? mapItems[0]?.property_id;
+      const cacheKey = coords
+        ? `${coords.lat.toFixed(4)},${coords.lon.toFixed(4)}`
+        : query;
 
-      if (propertyId == null) {
-        setSelectedProperty(null);
-        setSearchedEmpty(true);
-        if (overviewPins.length && mapCenter) showOverview(overviewPins, mapCenter);
-        return;
+      const cachedBase = options?.force
+        ? null
+        : readCache<any>('lookup', cacheKey);
+      const cachedCadastral = options?.force
+        ? null
+        : readCache<any>('cadastral', cacheKey);
+      let data: any;
+
+      if (cachedBase && cachedCadastral) {
+        data = { ...cachedBase, ...cachedCadastral };
+      } else {
+        const response = await mapApi.geoLookup(query, coords);
+        data = response.data;
+
+        const { cadastral, cadastral_error, cadastral_message, ...base } = data;
+
+        writeCache('lookup', cacheKey, base);
+        writeCache('cadastral', cacheKey, {
+          cadastral,
+          cadastral_error,
+          cadastral_message,
+        });
       }
-      await selectPropertyById(propertyId, propRaw?.address || query);
-    } catch {
-      setLoadError('Не удалось выполнить поиск');
+
+      const center: MapCenter = {
+        latitude: data.center.latitude,
+        longitude: data.center.longitude,
+      };
+
+      const surroundings: SurroundingItemData[] = (data.surroundings || []).map(
+        (raw: any) => {
+          const hint = resolveSurroundingHint(
+            raw.kind,
+            raw.type,
+            { name: raw.name, distance: raw.distance_text },
+            { impact: raw.impact, tip: raw.tip, link: raw.link }
+          );
+          return {
+            text: `${raw.name} — ${raw.distance_text}`,
+            type: raw.type,
+            impact: hint.impact,
+            tip: hint.tip,
+            link: hint.link,
+          };
+        }
+      );
+
+      const localProp = data.property;
+      const property: Property = localProp
+        ? mapBackendProperty(localProp, { surroundings })
+        : buildExternalProperty(data.address, center, surroundings, data.cadastral);
+
+      setSelectedLocation({
+        address: data.address || query,
+        latitude: center.latitude,
+        longitude: center.longitude,
+      });
+      setCadastralError(data.cadastral ? null : data.cadastral_error || null);
+      setCadastralMessage(data.cadastral ? null : data.cadastral_message || null);
+
+      setSelectedProperty(property);
+      setSearchQuery(data.address || query);
+      setMapCenter(center);
+      setMapMarkers(data.markers || []);
+      setGeoFailed(data.failed || []);
+      setRadiusM(data.radius_m || 3000);
+      setClickedPoint(projectToMap(center.latitude, center.longitude, center));
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const message = e?.response?.data?.message;
+      if (status === 404) {
+        setLoadError('Адрес не найден. Уточните запрос.');
+      } else if (status === 503) {
+        setLoadError(message || 'Геокодер не настроен на сервере.');
+      } else {
+        setLoadError(message || 'Не удалось выполнить поиск');
+      }
       setSelectedProperty(null);
       setSearchedEmpty(true);
     } finally {
@@ -384,24 +540,16 @@ const Step1Page: React.FC = () => {
     if (q) void applyLookup(q);
   };
 
-  const handleMapClick = (x: number, y: number) => {
-    setClickedPoint({ x, y });
-    const found = overviewPins.find((p) => Math.abs(p.x - x) < 50 && Math.abs(p.y - y) < 50);
-    if (found) {
-      void selectPropertyById(found.id, found.address);
-    } else {
-      setSelectedProperty(null);
-      setSearchedEmpty(true);
-      setSearchQuery('');
-      if (overviewPins.length && mapCenter) {
-        showOverview(overviewPins, {
-          latitude:
-            overviewPins.reduce((s, p) => s + p.latitude, 0) / overviewPins.length,
-          longitude:
-            overviewPins.reduce((s, p) => s + p.longitude, 0) / overviewPins.length,
-        });
-      }
+ 
+  const handleGeoClick = async (lat: number, lon: number) => {
+    const nearbyKnown = overviewPins.find(
+      (p) => Math.abs(p.latitude - lat) < 0.0015 && Math.abs(p.longitude - lon) < 0.0025
+    );
+    if (nearbyKnown) {
+      void selectPropertyById(nearbyKnown.id, nearbyKnown.address);
+      return;
     }
+    await applyLookup(`${lon.toFixed(6)},${lat.toFixed(6)}`, { lat, lon });
   };
 
   const handleBackClick = () => {
@@ -479,7 +627,9 @@ const Step1Page: React.FC = () => {
   const dataSourceLabel =
     selectedProperty?.source === 'demo'
       ? 'Демо-данные (подключение Росреестра)'
-      : 'Открытые данные (Росреестр)';
+      : selectedProperty?.source === 'rosreestr_parser'
+        ? 'Публичная кадастровая карта (НСПД)'
+        : 'Данные Росреестра недоступны';
 
   return (
     <div className="flex flex-col h-full">
@@ -531,19 +681,27 @@ const Step1Page: React.FC = () => {
         <div className="max-w-4xl mx-auto mb-4">
           <div
             className="rounded-xl border-2 border-border shadow-md overflow-hidden"
-            style={{ aspectRatio: '480/260' }}
+            style={{ aspectRatio: '16/9', minHeight: 380 }}
           >
             <MapView
               center={mapCenter}
               markers={mapMarkers}
               selected={!!selectedProperty}
               clickedPoint={clickedPoint}
-              onMapClick={handleMapClick}
+              onGeoClick={handleGeoClick}
+              radiusM={radiusM}
             />
           </div>
-          <p className="text-sm text-text-muted mt-2 text-right">
-            Кликните по карте или найдите адрес
-          </p>
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-sm text-text-muted">
+              {selectedProperty
+                ? `Зона анализа — ${(radiusM / 1000).toFixed(1).replace('.', ',')} км вокруг объекта`
+                : 'Данные окружения — OpenStreetMap'}
+            </p>
+            <p className="text-sm text-text-muted">
+              Кликните по карте или найдите адрес
+            </p>
+          </div>
         </div>
 
         {selectedProperty && (
@@ -558,7 +716,27 @@ const Step1Page: React.FC = () => {
                   <span className="text-sm text-text-muted ml-auto truncate">
                     {selectedProperty.address}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const q = searchQuery.trim();
+                      if (q) void applyLookup(q, undefined, { force: true });
+                    }}
+                    title="Запросить свежие данные, минуя кэш"
+                    className="shrink-0 text-text-muted hover:text-primary transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
                 </div>
+                {cadastralError && (
+                  <div className="mb-4 text-sm text-amber-800 bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
+                    {cadastralMessage
+                      ? cadastralMessage
+                      : cadastralError === 'unavailable'
+                        ? 'Сервис кадастровых данных не запущен, поэтому поля ниже пустые. Запустите парсер (utils/parser) и повторите поиск.'
+                        : 'По этим координатам участок в публичной кадастровой карте не найден. Для точных сведений закажите выписку ЕГРН.'}
+                  </div>
+                )}
                 <div className="space-y-4">
                   {[
                     {
@@ -621,8 +799,15 @@ const Step1Page: React.FC = () => {
                       onLinkClick={handleLinkClick}
                     />
                   ))}
-                  {sortedSurroundings.length === 0 && (
+                  {sortedSurroundings.length === 0 && geoFailed.length === 0 && (
                     <p className="text-sm text-text-muted">Нет данных об окружении</p>
+                  )}
+                  {geoFailed.length > 0 && (
+                    <div className="text-sm text-amber-800 bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
+                      Часть данных не загрузилась: сервис OpenStreetMap был
+                      перегружен. Повторите поиск через минуту, чтобы увидеть
+                      полную картину.
+                    </div>
                   )}
                 </div>
               </div>

@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 
+export interface SelectedLocation {
+  address: string;
+  latitude: number;
+  longitude: number;
+}
+
 interface AppState {
   activeStep: number;
+  selectedLocation: SelectedLocation | null;
   sidebarCollapsed: boolean;
   isSurveyCompleted: boolean;
   surveyFormData: Record<string, string>;
@@ -9,6 +16,7 @@ interface AppState {
   checkedAlgorithms: Record<string, string[]>;
   
   setActiveStep: (step: number) => void;
+  setSelectedLocation: (location: SelectedLocation | null) => void;
   toggleSidebar: () => void;
   setSurveyCompleted: (completed: boolean) => void;
   setSurveyFormData: (data: Record<string, string>) => void;
@@ -20,6 +28,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   activeStep: 0,
+  selectedLocation: null,
   sidebarCollapsed: false,
   isSurveyCompleted: false,
   surveyFormData: {},
@@ -27,6 +36,7 @@ export const useAppStore = create<AppState>((set) => ({
   checkedAlgorithms: {},
 
   setActiveStep: (step) => set({ activeStep: step }),
+  setSelectedLocation: (location) => set({ selectedLocation: location }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setSurveyCompleted: (completed) => set({ isSurveyCompleted: completed }),
   setSurveyFormData: (data) => set({ surveyFormData: data }),
