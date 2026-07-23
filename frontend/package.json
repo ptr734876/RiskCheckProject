@@ -20,7 +20,10 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "zustand": "^4.4.7"
+    "zustand": "^4.4.7",
+    "anticaptcha2": "^1.0.1",
+    "date-format": "^4.0.14",
+    "selenium-webdriver": "^4.46.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.42",
