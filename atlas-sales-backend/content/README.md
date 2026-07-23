@@ -10,3 +10,7 @@
 | Источники документов | `frontend/public/documents/sources.json` |
 | Анкета | `frontend/public/questionnaire/survey.json` |
 | Материалы | `frontend/public/articles/*.docx` |
+| Подсказки | `frontend/public/hints/hints.json` (без сида в БД, читает фронтенд; поля `link` ведут на статью `helpful` или алгоритм `algorithm`) |
+
+
+Общая инструкция: `../../README.md`.

@@ -1,12 +1,9 @@
-
 from flask import Blueprint
 from flask_login import current_user, login_required
 from app.documents.services import get_selected_documents
 from app.extensions import db
 from app.models import Document, DocumentSource, UserDocument
-
 bp = Blueprint("documents", __name__, url_prefix="/api/documents")
-
 
 @bp.get("/sources")
 def list_document_sources():
@@ -14,7 +11,6 @@ def list_document_sources():
         db.select(DocumentSource).order_by(DocumentSource.sort_order, DocumentSource.id)
     ).all()
     return {"items": [s.to_dict() for s in sources]}
-
 
 @bp.get("")
 def list_documents():
@@ -47,7 +43,6 @@ def list_documents():
         "personalized": bool(user and user.questionnaire),
     }
 
-
 @bp.post("/<int:document_id>/toggle")
 @login_required
 def toggle_document(document_id):
@@ -69,4 +64,3 @@ def toggle_document(document_id):
         row.collected = not row.collected
     db.session.commit()
     return {"document_id": document_id, "collected": row.collected}
-

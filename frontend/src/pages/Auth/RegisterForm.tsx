@@ -20,22 +20,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
-  const handleOpenDocument = (e: React.MouseEvent, fileId: string) => {
-    e.preventDefault();
-    
-    const fileMap: Record<string, string> = {
-      'file1': 'Обработка_персональных_данных.docx',
-      'file2': 'Условия_политики_конфиденциальност.docx',
-    };
-    
-    const fileName = fileMap[fileId];
-    if (!fileName) return;
-    
-    const filePath = `/auth/${fileName}`;
-    
-    window.open(filePath, '_blank');
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed) return;
@@ -124,8 +108,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
                 className="sr-only"
               />
               <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                agreed 
-                  ? 'bg-primary border-primary' 
+                agreed
+                  ? 'bg-primary border-primary'
                   : 'border-border-dark group-hover:border-primary'
               }`}>
                 {agreed && (
@@ -136,26 +120,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
               </div>
             </div>
             <span className="text-base text-text-secondary group-hover:text-text-primary transition-colors leading-relaxed">
-              Я согласен на{' '}
-              <a 
-                href="#" 
-                onClick={(e) => handleOpenDocument(e, 'file1')}
-                className="text-primary underline underline-offset-2 hover:text-primary/80 font-medium"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                обработку персональных данных
-              </a>
-              {' '}и принимаю{' '}
-              <a 
-                href="#" 
-                onClick={(e) => handleOpenDocument(e, 'file2')}
-                className="text-primary underline underline-offset-2 hover:text-primary/80 font-medium"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                условия политики конфиденциальности
-              </a>
+              Я согласен на обработку персональных данных и принимаю
+              условия политики конфиденциальности
             </span>
           </label>
 

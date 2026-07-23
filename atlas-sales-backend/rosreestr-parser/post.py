@@ -1,7 +1,5 @@
 import requests
 import json
-
-# POST запрос
 response = requests.post(
     "http://localhost:8000/parse",
     json={

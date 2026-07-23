@@ -1,4 +1,3 @@
-
 def test_register_login_logout(client):
     register = client.post("/api/auth/register", json={
         "full_name":"Ирина Иванова",

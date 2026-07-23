@@ -1,4 +1,3 @@
-
 from app.extensions import db
 
 class Property(db.Model):
@@ -17,11 +16,9 @@ class Property(db.Model):
     checked_at = db.Column(db.String(50))
     latitude = db.Column(db.Float, nullable=False)
     longitude = db.Column(db.Float, nullable=False)
-
     nearby_objects = db.relationship(
         "NearbyObject", back_populates="property", cascade="all, delete-orphan"
     )
-
     def to_dict(self, include_nearby=False):
         data = {
             "id": self.id, "address": self.address,
@@ -51,7 +48,6 @@ class NearbyObject(db.Model):
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     property = db.relationship("Property", back_populates="nearby_objects")
-
     def to_dict(self):
         return {
             "id": self.id, "kind": self.kind, "name": self.name,

@@ -1,13 +1,9 @@
 from collections import defaultdict
-
 from flask import Blueprint
 from flask_login import current_user, login_required
-
 from app.extensions import db
 from app.models import Algorithm, AlgorithmStep, UserAlgorithmStep
-
 bp = Blueprint("algorithms", __name__, url_prefix="/api/algorithms")
-
 
 def _completed_step_codes_for_user():
     if not current_user.is_authenticated:
@@ -23,7 +19,6 @@ def _completed_step_codes_for_user():
     ).all()
     return {s.code for s in steps}
 
-
 @bp.get("")
 def list_algorithms():
     items = db.session.scalars(
@@ -31,15 +26,12 @@ def list_algorithms():
     ).all()
     return {"items": [i.to_dict() for i in items]}
 
-
 @bp.get("/tree")
 def algorithms_tree():
-    """Дерево групп в формате фронтенда (ALGORITHMS_CONFIG)."""
     completed_codes = _completed_step_codes_for_user()
     items = db.session.scalars(
         db.select(Algorithm).order_by(Algorithm.group_order, Algorithm.sort_order, Algorithm.id)
     ).all()
-
     groups_map = {}
     for algo in items:
         key = algo.group_code
@@ -51,19 +43,15 @@ def algorithms_tree():
                 "algorithms": [],
             }
         groups_map[key]["algorithms"].append(algo.to_config_dict(completed_codes))
-
     groups = sorted(groups_map.values(), key=lambda g: (g["order"], g["id"]))
     for g in groups:
         g.pop("order", None)
-
     checked = defaultdict(list)
     for algo in items:
         codes = [s.code for s in algo.steps if s.code in completed_codes]
         if codes:
             checked[algo.code] = codes
-
     return {"groups": groups, "checkedAlgorithms": dict(checked)}
-
 
 @bp.get("/by-code/<code>")
 def get_algorithm_by_code(code):
@@ -72,14 +60,12 @@ def get_algorithm_by_code(code):
         return {"error": "algorithm_not_found"}, 404
     return _algorithm_detail(algorithm)
 
-
 @bp.get("/<int:algorithm_id>")
 def get_algorithm(algorithm_id):
     algorithm = db.session.get(Algorithm, algorithm_id)
     if algorithm is None:
         return {"error": "algorithm_not_found"}, 404
     return _algorithm_detail(algorithm)
-
 
 def _algorithm_detail(algorithm: Algorithm):
     completed_codes = _completed_step_codes_for_user()
@@ -96,7 +82,6 @@ def _algorithm_detail(algorithm: Algorithm):
         "percent": round(completed / total * 100) if total else 0,
     }
     return {"algorithm": data}
-
 
 @bp.post("/steps/<int:step_id>/toggle")
 @login_required

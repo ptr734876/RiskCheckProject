@@ -2,6 +2,7 @@ import React from 'react';
 import { Building2, ArrowRight, Shield, FileText, BookOpen, MapPin, Sparkles, Library, UserPlus, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
+import GlobalSearch from '@/components/layout/GlobalSearch';
 
 const HomePage: React.FC = () => {
   const { isAuthenticated, user, loginAsGuest } = useAuthStore();
@@ -58,30 +59,36 @@ const HomePage: React.FC = () => {
 
   const benefits = [
     'Персональный комплект документов под ваш объект',
-    'Индивидуальные алгоритмы и инструкции',
+    'Индивидуальные пошаговые инструкции',
     'Рекомендации по вашей ситуации',
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-blue-50 flex flex-col">
       <nav className="bg-white/95 backdrop-blur-sm border-b-2 border-border shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <Building2 className="w-6 h-6 text-primary" strokeWidth={1.5} />
             </div>
-            <span className="text-xl font-bold font-display text-text-primary">
+            <span className="text-xl font-bold font-display text-text-primary hidden sm:inline">
               Атлас продаж
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <GlobalSearch
+            className="relative flex-1 max-w-xl mx-2"
+            beforeNavigate={async () => {
+              await ensureAccess();
+            }}
+          />
+          <div className="flex items-center gap-3 shrink-0">
             {isAuthenticated && !user?.isGuest ? (
               <button onClick={() => navigate('/app')} className="btn-primary">
                 Перейти в приложение
               </button>
             ) : (
               <>
-                <button onClick={handleGetStarted} className="btn-ghost font-semibold">
+                <button onClick={handleGetStarted} className="btn-ghost font-semibold hidden md:inline-flex">
                   Попробовать как гость
                 </button>
                 <button onClick={() => navigate('/auth')} className="btn-primary flex items-center gap-2">
@@ -115,14 +122,14 @@ const HomePage: React.FC = () => {
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 border-2 border-primary/20 p-6 md:p-8">
               <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
               <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" />
-              
+
               <div className="relative flex flex-col md:flex-row items-center gap-6 md:gap-8">
                 <div className="flex-shrink-0">
                   <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
                     <UserPlus className="w-8 h-8 text-primary" strokeWidth={1.5} />
                   </div>
                 </div>
-                
+
                 <div className="flex-1 text-center md:text-left">
                   <h3 className="text-xl md:text-2xl font-bold text-text-primary mb-2">
                     Войдите в аккаунт — получите больше!
@@ -136,7 +143,7 @@ const HomePage: React.FC = () => {
                     ))}
                   </div>
                 </div>
-                
+
                 <div className="flex-shrink-0">
                   <button
                     onClick={() => navigate('/auth')}
@@ -204,16 +211,16 @@ const HomePage: React.FC = () => {
               <span className="text-xs text-gray-300">•</span>
               <span className="text-xs text-gray-400">{new Date().getFullYear()}</span>
             </div>
-            
+
             <div className="text-center max-w-2xl">
               <p className="text-xs text-gray-400 leading-relaxed">
-                <span className="font-medium text-gray-500">Внимание:</span> Вся информация, представленная на сайте, 
-                носит исключительно справочный и информационный характер и не является публичной офертой. 
-                Данные могут быть неактуальными — рекомендуем проверять актуальность информации в официальных источниках. 
+                <span className="font-medium text-gray-500">Внимание:</span> Вся информация, представленная на сайте,
+                носит исключительно справочный и информационный характер и не является публичной офертой.
+                Данные могут быть неактуальными — рекомендуем проверять актуальность информации в официальных источниках.
                 За достоверность предоставленных сведений мы не несём ответственности.
               </p>
             </div>
-            
+
             <div className="flex items-center gap-3 text-xs text-gray-400">
               <a href="#" className="hover:text-gray-600 transition-colors"></a>
               <span>•</span>

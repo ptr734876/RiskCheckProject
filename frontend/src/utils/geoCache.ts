@@ -1,32 +1,10 @@
-/**
- * Кэш геоданных в localStorage.
- *
- * Запросы к геокодеру, OpenStreetMap и парсеру Росреестра идут
- * через внешние сервисы и занимают секунды, а иногда падают по
- * таймауту. Повторный поиск того же адреса не должен запускать
- * их заново.
- *
- * Почему localStorage, а не куки: куки ограничены ~4 КБ на домен
- * и отправляются на сервер с каждым запросом. Список объектов
- * окружения туда не помещается, а если бы помещался — замедлял
- * бы все запросы.
- *
- * Срок жизни разный по типам данных:
- *  - адрес и окружение меняются медленно, храним сутки;
- *  - офисы (МФЦ) — тоже сутки;
- *  - кадастровые сведения храним всего час: обременения и аресты
- *    появляются в любой момент, а показать устаревшее
- *    "обременений нет" опаснее, чем сходить в сеть ещё раз.
- */
-
 const PREFIX = 'atlas.geo.';
 const VERSION = 'v1';
 
-/** Срок жизни записей по типам, мс. */
 export const TTL = {
-  lookup: 24 * 60 * 60 * 1000, // адрес + окружение — сутки
-  offices: 24 * 60 * 60 * 1000, // МФЦ и Росреестр — сутки
-  cadastral: 60 * 60 * 1000, // кадастр — час
+  lookup: 24 * 60 * 60 * 1000,
+  offices: 24 * 60 * 60 * 1000,
+  cadastral: 60 * 60 * 1000,
 } as const;
 
 export type CacheKind = keyof typeof TTL;
@@ -37,13 +15,10 @@ interface CacheEntry<T> {
   ttl: number;
 }
 
-/** Сколько записей держим, чтобы не разрастаться бесконечно. */
 const MAX_ENTRIES = 60;
 
 function isAvailable(): boolean {
   try {
-    // В приватном режиме Safari localStorage существует,
-    // но выбрасывает при записи — проверяем реальной операцией.
     const probe = `${PREFIX}probe`;
     window.localStorage.setItem(probe, '1');
     window.localStorage.removeItem(probe);
@@ -55,7 +30,6 @@ function isAvailable(): boolean {
 
 const available = typeof window !== 'undefined' && isAvailable();
 
-/** Нормализует адрес: регистр и лишние пробелы не должны плодить записи. */
 function normalizeQuery(query: string): string {
   return query.trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -64,7 +38,6 @@ function buildKey(kind: CacheKind, query: string): string {
   return `${PREFIX}${VERSION}.${kind}.${normalizeQuery(query)}`;
 }
 
-/** Ключ для координат: округляем до ~10 м, иначе кэш не сработает. */
 export function coordsKey(lat: number, lon: number): string {
   return `${lat.toFixed(4)},${lon.toFixed(4)}`;
 }
@@ -85,7 +58,6 @@ export function readCache<T>(kind: CacheKind, query: string): T | null {
 
     return entry.value;
   } catch {
-    // Повреждённая запись — ведём себя как при промахе.
     return null;
   }
 }
@@ -106,8 +78,7 @@ export function writeCache<T>(kind: CacheKind, query: string, value: T): void {
     window.localStorage.setItem(key, payload);
     return;
   } catch {
-    // Квота исчерпана. Освобождаем место постепенно, начиная
-    // с самых старых записей, чтобы не потерять свежие.
+
   }
 
   const entries = listEntries();
@@ -118,15 +89,11 @@ export function writeCache<T>(kind: CacheKind, query: string, value: T): void {
       window.localStorage.setItem(key, payload);
       return;
     } catch {
-      // Места всё ещё мало — удаляем следующую по старшинству.
+
     }
   }
-
-  // Кэш необязателен: если записать не удалось, просто работаем
-  // без него, приложение от этого не ломается.
 }
 
-/** Все ключи кэша, отсортированные от старых к новым. */
 function listEntries(): Array<{ key: string; savedAt: number }> {
   const entries: Array<{ key: string; savedAt: number }> = [];
 
@@ -138,7 +105,7 @@ function listEntries(): Array<{ key: string; savedAt: number }> {
     try {
       savedAt = JSON.parse(window.localStorage.getItem(key) || '{}').savedAt || 0;
     } catch {
-      savedAt = 0; // битую запись считаем самой старой
+      savedAt = 0;
     }
     entries.push({ key, savedAt });
   }
@@ -146,7 +113,6 @@ function listEntries(): Array<{ key: string; savedAt: number }> {
   return entries.sort((a, b) => a.savedAt - b.savedAt);
 }
 
-/** Убирает просроченное и лишнее. Вызывается при старте приложения. */
 export function pruneCache(): void {
   if (!available) return;
 
@@ -179,7 +145,6 @@ export function pruneCache(): void {
   }
 }
 
-/** Полностью очищает кэш геоданных. */
 export function clearCache(): void {
   if (!available) return;
 
@@ -191,7 +156,6 @@ export function clearCache(): void {
   keys.forEach((key) => window.localStorage.removeItem(key));
 }
 
-/** Возраст записи в минутах — чтобы показать «данные от такого-то времени». */
 export function cacheAgeMinutes(kind: CacheKind, query: string): number | null {
   if (!available || !query) return null;
 

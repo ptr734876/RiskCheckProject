@@ -220,12 +220,5 @@ __marimo__/
 # Project
 riskcheck.db
 frontend/node_modules/
-
-/backend
-main-pages
-tests
-docs
-package-lock.json
-frontend/.DS_Store
-node_modules/
-.env
+.DS_Store
+**/.DS_Store

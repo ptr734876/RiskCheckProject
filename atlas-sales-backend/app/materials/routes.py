@@ -1,12 +1,9 @@
 from flask import Blueprint, request, send_from_directory
 from sqlalchemy import or_
-
 from app.content_seed import ARTICLES_DIR
 from app.extensions import db
 from app.models import Material
-
 bp = Blueprint("materials", __name__, url_prefix="/api/materials")
-
 
 @bp.get("")
 def list_materials():
@@ -29,7 +26,6 @@ def list_materials():
     items = db.session.scalars(stmt).all()
     return {"items": [i.to_dict() for i in items]}
 
-
 @bp.get("/by-slug/<slug>")
 def get_material_by_slug(slug):
     item = db.session.scalar(db.select(Material).where(Material.slug == slug))
@@ -37,14 +33,12 @@ def get_material_by_slug(slug):
         return {"error": "material_not_found"}, 404
     return {"material": item.to_dict(include_content=True)}
 
-
 @bp.get("/<int:material_id>")
 def get_material(material_id):
     item = db.session.get(Material, material_id)
     if item is None:
         return {"error": "material_not_found"}, 404
     return {"material": item.to_dict(include_content=True)}
-
 
 @bp.get("/<int:material_id>/file")
 def get_material_file(material_id):

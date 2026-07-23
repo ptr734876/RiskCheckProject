@@ -21,14 +21,15 @@ interface MapViewProps {
   selected?: boolean;
   clickedPoint?: { x: number; y: number } | null;
   onMapClick?: (x: number, y: number) => void;
+
   onGeoClick?: (lat: number, lon: number) => void;
+
   radiusM?: number;
   onReady?: () => void;
 }
 
 export const MAP_WIDTH = 480;
 export const MAP_HEIGHT = 260;
-
 
 export function projectToMap(
   lat: number,
@@ -59,7 +60,6 @@ const DEFAULT_PRESET_PLUS = 'islands#greenDotIcon';
 const DEFAULT_PRESET_MINUS = 'islands#redDotIcon';
 
 let scriptPromise: Promise<void> | null = null;
-
 
 function loadYandexMaps(apiKey: string): Promise<void> {
   if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
@@ -225,6 +225,14 @@ const MapView: React.FC<MapViewProps> = ({
         new ymaps.Placemark(
           [property.latitude, property.longitude],
           { balloonContentHeader: property.label, iconCaption: property.label },
+          { preset: 'islands#redHomeIcon', zIndex: 1000 }
+        )
+      );
+    } else if (selected && center) {
+      collection.add(
+        new ymaps.Placemark(
+          [center.latitude, center.longitude],
+          { balloonContentHeader: 'Выбранная точка', iconCaption: 'Объект' },
           { preset: 'islands#redHomeIcon', zIndex: 1000 }
         )
       );

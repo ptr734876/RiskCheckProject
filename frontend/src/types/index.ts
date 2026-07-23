@@ -1,4 +1,3 @@
-// User
 export interface User {
   id: string;
   email: string;
@@ -7,7 +6,6 @@ export interface User {
   isGuest: boolean;
 }
 
-// Property
 export interface LegalItem {
   label: string;
   value: string;
@@ -39,7 +37,6 @@ export interface Property {
   surroundings: SurroundingItem[];
 }
 
-// Documents
 export interface DocumentSource {
   id: string;
   title: string;
@@ -57,8 +54,6 @@ export interface DocumentItem {
   articleId: string | null;
   collected?: boolean;
 }
-
-// Algorithms
 
 export interface AlgorithmStep {
   id: string;
@@ -98,22 +93,6 @@ export interface AlgorithmGroup {
   algorithms: AlgorithmConfig[];
 }
 
-// Helpful Articles
-
-export interface TextElement {
-  type: 'text' | 'link';
-  content: string;
-  linkId?: string;
-  linkType?: 'algorithm' | 'helpful' | 'step1' | 'step2' | 'external';
-  linkLabel?: string;
-  linkUrl?: string;
-}
-
-export interface ContentBlock {
-  type: 'paragraph' | 'list' | 'highlight' | 'bullet-list';
-  elements: TextElement[];
-}
-
 export interface ArticleManifest {
   id: string;
   title: string;
@@ -122,26 +101,13 @@ export interface ArticleManifest {
   fileName: string;
 }
 
-export interface ArticlesManifestFile {
-  generatedAt: string;
-  articles: ArticleManifest[];
-}
-
-export interface HelpfulArticle {
-  id: string;
-  title: string;
-  description: string;
-  keyPoints: string[];
-  content: ContentBlock[];
-}
-
 export interface PlaceItem {
   name: string;
   address: string;
   time: string;
   distance: string;
-  latitude?: number | null;
-  longitude?: number | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface PlaceCategory {
@@ -151,9 +117,6 @@ export interface PlaceCategory {
   places: PlaceItem[];
 }
 
-export type MfcLocation = PlaceItem & { type?: 'property' | 'user' };
-
-// Survey
 export interface SurveyQuestion {
   id: string;
   label: string;
@@ -172,11 +135,4 @@ export interface SurveyStep {
   title: string;
   subtitle: string;
   questions: SurveyQuestion[];
-}
-
-export interface LegalDocument {
-  title: string;
-  subtitle: string;
-  fileName: string;
-  content: string[];
 }

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   User,
   MapPin,
-  Clock,
   ChevronLeft,
   ArrowRight,
   ArrowLeft,
@@ -13,7 +12,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useAppStore } from '@/store/appStore';
 import { coordsKey, readCache, writeCache } from '@/utils/geoCache';
 import { useNavigationStore } from '@/store/navigationStore';
-import { documentsApi, mapApi } from '@/api';
+import { documentsApi, mapApi, userGeoApi } from '@/api';
 import {
   mapBackendDocument,
   mapBackendDocumentSource,
@@ -65,21 +64,51 @@ function buildAllSourcesDownloadContent(
 
 const docKey = (doc: DocumentItem) => (doc.id != null ? String(doc.id) : doc.title);
 
+const OFFICE_FALLBACK = [
+  {
+    id: 'mfc',
+    title: 'МФЦ',
+    subtitle: 'Центры «Мои документы» рядом с объектом',
+    allMapButton: 'Открыть все МФЦ на карте',
+    emptyText: 'Ближайшие МФЦ не найдены.',
+    searchText: 'МФЦ',
+  },
+  {
+    id: 'rosreestr_office',
+    title: 'Росреестр / кадастровая палата',
+    subtitle: 'Офисы для подачи и получения документов',
+    allMapButton: 'Открыть все офисы Росреестра на карте',
+    emptyText: 'Ближайшие офисы Росреестра не найдены.',
+    searchText: 'Росреестр',
+  },
+] as const;
 
-function yandexMapsUrl(place: {
-  name: string;
-  address: string;
-  latitude: number | null;
-  longitude: number | null;
-}): string | null {
-  if (place.latitude == null || place.longitude == null) return null;
+const NEARBY_SHOW_LIMIT = 2;
 
-  const point = `${place.longitude},${place.latitude}`;
-  const label = [place.name, place.address].filter(Boolean).join(', ');
-
+function yandexSearchNearUrl(
+  center: { latitude: number; longitude: number },
+  searchText: string,
+  zoom = 14
+): string {
   return (
     'https://yandex.ru/maps/?' +
-    `pt=${point},pm2rdm&z=17&text=${encodeURIComponent(label)}`
+    `ll=${center.longitude},${center.latitude}&z=${zoom}` +
+    `&text=${encodeURIComponent(searchText)}`
+  );
+}
+
+/** Карта с одной отмеченной точкой офиса. */
+function yandexPlaceUrl(
+  place: { latitude: number | null; longitude: number | null; name: string },
+  zoom = 16
+): string | null {
+  if (place.latitude == null || place.longitude == null) return null;
+  const pt = `${place.longitude},${place.latitude},pm2rdm`;
+  return (
+    'https://yandex.ru/maps/?' +
+    `ll=${place.longitude},${place.latitude}&z=${zoom}` +
+    `&pt=${pt}` +
+    `&text=${encodeURIComponent(place.name)}`
   );
 }
 
@@ -92,12 +121,13 @@ const Step2Page: React.FC = () => {
 
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentSources, setDocumentSources] = useState<DocumentSource[]>([]);
-  const [placeCategories, setPlaceCategories] = useState<PlaceCategory[]>([]);
-  // Данные OSM получить не удалось — отличаем от "офисов нет рядом".
-  const [placesFailed, setPlacesFailed] = useState(false);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [placeCategories, setPlaceCategories] = useState<PlaceCategory[]>([]);
+  const [placesLoading, setPlacesLoading] = useState(false);
+  const [placesFailed, setPlacesFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,43 +135,18 @@ const Step2Page: React.FC = () => {
       setLoading(true);
       setLoadError(null);
       try {
-        const officesKey = selectedLocation
-          ? coordsKey(selectedLocation.latitude, selectedLocation.longitude)
-          : '';
-
-        const cachedOffices = officesKey
-          ? readCache<any>('offices', officesKey)
-          : null;
-
-        const [docsRes, placesRes] = await Promise.all([
-          documentsApi.getAll(),
-          selectedLocation && !cachedOffices
-            ? mapApi
-                .getOffices(selectedLocation.latitude, selectedLocation.longitude)
-                .catch(() => null)
-            : Promise.resolve(null),
-        ]);
+        const docsRes = await documentsApi.getAll();
         if (cancelled) return;
         const mapped: Array<DocumentItem & { collected: boolean }> = (
           docsRes.data.items || []
         ).map((item: any) => mapBackendDocument(item));
         setDocuments(mapped);
         setCheckedDocuments(
-          mapped.filter((d: DocumentItem & { collected: boolean }) => d.collected).map((d) => docKey(d))
+          mapped
+            .filter((d: DocumentItem & { collected: boolean }) => d.collected)
+            .map((d) => docKey(d))
         );
-        const sources = (docsRes.data.sources || []).map(mapBackendDocumentSource);
-        setDocumentSources(sources);
-        const officesData = cachedOffices ?? placesRes?.data ?? null;
-
-        if (!cachedOffices && officesKey && officesData && !officesData.failed) {
-          writeCache('offices', officesKey, officesData);
-        }
-
-        const categories = (officesData?.categories || []).map(
-          mapBackendPlaceCategory
-        );
-        setPlaceCategories(categories);
-        setPlacesFailed(Boolean(officesData?.failed));
+        setDocumentSources((docsRes.data.sources || []).map(mapBackendDocumentSource));
       } catch {
         if (!cancelled) setLoadError('Не удалось загрузить документы с сервера');
       } finally {
@@ -151,7 +156,124 @@ const Step2Page: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, setCheckedDocuments, selectedLocation]);
+  }, [isAuthenticated, setCheckedDocuments]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!selectedLocation) {
+      setPlaceCategories([]);
+      setPlacesFailed(false);
+      setPlacesLoading(false);
+      return;
+    }
+
+    (async () => {
+      setPlacesLoading(true);
+      setPlacesFailed(false);
+
+      const officesKey = coordsKey(
+        selectedLocation.latitude,
+        selectedLocation.longitude
+      );
+
+      let cachedOffices = readCache<any>('offices', officesKey);
+
+      if (!cachedOffices && isAuthenticated) {
+        try {
+          const { data } = await userGeoApi.get();
+          const state = data.state;
+          if (
+            state?.offices &&
+            state.latitude != null &&
+            state.longitude != null &&
+            coordsKey(state.latitude, state.longitude) === officesKey
+          ) {
+            cachedOffices = state.offices;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (cancelled) return;
+
+      if (cachedOffices) {
+        setPlaceCategories((cachedOffices.categories || []).map(mapBackendPlaceCategory));
+        setPlacesFailed(Boolean(cachedOffices.failed));
+        setPlacesLoading(false);
+        return;
+      }
+
+      const persistOffices = (officesData: Record<string, unknown>) => {
+        writeCache('offices', officesKey, officesData);
+        if (!isAuthenticated) return;
+        void userGeoApi
+          .save({
+            address: selectedLocation.address,
+            latitude: selectedLocation.latitude,
+            longitude: selectedLocation.longitude,
+            offices: officesData,
+          })
+          .catch(() => undefined);
+      };
+
+      const emptyOfficesPayload = (failed: boolean) => ({
+        source: failed ? 'error' : 'none',
+        center: {
+          latitude: selectedLocation.latitude,
+          longitude: selectedLocation.longitude,
+        },
+        categories: [
+          {
+            id: 'mfc',
+            title: 'МФЦ',
+            subtitle: 'Центры «Мои документы» рядом с объектом',
+            places: [],
+          },
+          {
+            id: 'rosreestr_office',
+            title: 'Росреестр / кадастровая палата',
+            subtitle: 'Офисы для подачи и получения документов',
+            places: [],
+          },
+        ],
+        failed,
+        radius_m: null,
+        searchedAt: new Date().toISOString(),
+      });
+
+      try {
+        const placesRes = await mapApi.getOffices(
+          selectedLocation.latitude,
+          selectedLocation.longitude
+        );
+        if (cancelled) return;
+        const officesData = {
+          ...(placesRes.data || emptyOfficesPayload(true)),
+          searchedAt: new Date().toISOString(),
+        };
+        setPlaceCategories((officesData.categories || []).map(mapBackendPlaceCategory));
+        setPlacesFailed(Boolean(officesData.failed));
+        persistOffices(officesData);
+      } catch {
+        if (!cancelled) {
+          const failedPayload = emptyOfficesPayload(true);
+          setPlaceCategories(
+            (failedPayload.categories || []).map(mapBackendPlaceCategory)
+          );
+          setPlacesFailed(true);
+          persistOffices(failedPayload);
+        }
+      } finally {
+        if (!cancelled) setPlacesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, selectedLocation]);
 
   const documentGroups = documentSources
     .map((source) => ({
@@ -355,7 +477,7 @@ const Step2Page: React.FC = () => {
                               }
                               className="text-sm text-primary font-semibold hover:text-primary-dark bg-primary/10 border border-primary/30 rounded-lg px-3 py-1"
                             >
-                              Алгоритм получения →
+                              Инструкция →
                             </button>
                           )}
                           {doc.articleId && (
@@ -369,7 +491,7 @@ const Step2Page: React.FC = () => {
                               }
                               className="text-sm text-text-secondary font-medium hover:text-primary bg-slate-50 border border-border rounded-lg px-3 py-1"
                             >
-                              Узнать подробнее →
+                              В журнал →
                             </button>
                           )}
                         </div>
@@ -429,99 +551,102 @@ const Step2Page: React.FC = () => {
       <div className="w-72 shrink-0 bg-white border-l-2 border-border p-6 overflow-y-auto">
         {!selectedLocation && (
           <p className="text-sm text-text-muted">
-            Выберите объект на Шаге 1 — покажем ближайшие МФЦ
-            и офисы Росреестра с расстоянием до них.
+            Выберите объект на Шаге 1 — здесь появятся ближайшие МФЦ
+            и офисы Росреестра.
           </p>
         )}
-        {selectedLocation && placesFailed && (
-          <div className="text-sm text-amber-800 bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
-            Не удалось загрузить список офисов: сервис карт был
-            перегружен. Обновите страницу через минуту.
-          </div>
-        )}
-        {selectedLocation && !placesFailed && placeCategories.every(
-          (c) => c.places.length === 0
-        ) && (
-          <p className="text-sm text-text-muted">
-            Рядом с выбранным адресом офисы не найдены. Попробуйте
-            проверить на Госуслугах.
-          </p>
-        )}
-        <div className="space-y-8">
-          {placeCategories
-            .filter((category) => category.places.length > 0)
-            .map((category) => (
-            <div key={category.id}>
-              <div className="mb-4">
-                <h3 className="text-sm uppercase tracking-wider text-primary font-bold mb-1">
-                  {category.title}
-                </h3>
-                {category.subtitle && (
-                  <p className="text-base text-text-secondary">{category.subtitle}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                {category.places.map((place) => {
-                  const mapUrl = yandexMapsUrl(place);
-                  const cardClass =
-                    'block bg-slate-50 border-2 border-border rounded-xl p-3 ' +
-                    'transition-colors ' +
-                    (mapUrl
-                      ? 'hover:border-primary hover:bg-primary/5 cursor-pointer'
-                      : 'hover:border-primary/30');
+        {selectedLocation && (
+          <div className="space-y-6">
+            <p className="text-sm text-text-secondary">
+              Вокруг: {selectedLocation.address}
+            </p>
+            {placesLoading && (
+              <p className="text-sm text-text-muted">Ищем ближайшие офисы…</p>
+            )}
+            {!placesLoading &&
+              placesFailed &&
+              placeCategories.every((c) => c.places.length === 0) && (
+                <div className="text-sm text-amber-800 bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
+                  Не удалось проверить ближайшие офисы. Можно открыть
+                  поиск на карте вручную.
+                </div>
+              )}
+            {!placesLoading &&
+              OFFICE_FALLBACK.map((fallback) => {
+                const category =
+                  placeCategories.find((c) => c.id === fallback.id) || null;
+                const places = category?.places || [];
+                const nearest = places.slice(0, NEARBY_SHOW_LIMIT);
+                const allMapUrl = yandexSearchNearUrl(
+                  selectedLocation,
+                  fallback.searchText
+                );
 
-                  const content = (
-                    <>
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className="text-sm font-bold text-text-primary">
-                          {place.name}
-                        </p>
-                        <span className="text-sm text-primary font-bold shrink-0">
-                          {place.distance}
-                        </span>
-                      </div>
-                      {place.address && (
-                        <p className="text-sm text-text-secondary">{place.address}</p>
-                      )}
-                      {place.time && place.time !== '—' && (
-                        <div className="flex items-center gap-1 mt-2">
-                          <Clock className="w-4 h-4 text-text-muted" />
-                          <span className="text-sm text-text-secondary">
-                            {place.time}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 mt-1">
-                        <MapPin className="w-4 h-4 text-text-muted" />
-                        <span className="text-sm text-text-muted">
-                          {mapUrl ? 'открыть на карте' : 'пункт выдачи'}
-                        </span>
-                      </div>
-                    </>
-                  );
+                return (
+                  <div key={fallback.id}>
+                    <div className="mb-3">
+                      <h3 className="text-sm uppercase tracking-wider text-primary font-bold mb-1">
+                        {fallback.title}
+                      </h3>
+                      <p className="text-sm text-text-secondary">{fallback.subtitle}</p>
+                    </div>
+                    {nearest.length > 0 ? (
+                      <ul className="space-y-2 mb-3">
+                        {nearest.map((place) => {
+                          const placeUrl = yandexPlaceUrl(place);
+                          const meta =
+                            [place.distance !== '—' ? place.distance : null, place.address]
+                              .filter(Boolean)
+                              .join(' · ') || '—';
 
-                  const key = `${category.id}-${place.name}-${place.address}`;
+                          if (!placeUrl) {
+                            return (
+                              <li
+                                key={`${place.name}-${place.latitude}-${place.longitude}`}
+                                className="text-sm rounded-lg border-2 border-border px-3 py-2"
+                              >
+                                <p className="font-semibold text-text-primary leading-snug">
+                                  {place.name}
+                                </p>
+                                <p className="text-text-muted text-xs mt-0.5">{meta}</p>
+                              </li>
+                            );
+                          }
 
-                  return mapUrl ? (
+                          return (
+                            <li key={`${place.name}-${place.latitude}-${place.longitude}`}>
+                              <a
+                                href={placeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-sm rounded-lg border-2 border-border px-3 py-2 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                              >
+                                <p className="font-semibold text-primary leading-snug">
+                                  {place.name}
+                                </p>
+                                <p className="text-text-muted text-xs mt-0.5">{meta}</p>
+                              </a>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-text-muted mb-3">{fallback.emptyText}</p>
+                    )}
                     <a
-                      key={key}
-                      href={mapUrl}
+                      href={allMapUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={cardClass}
+                      className="flex items-center justify-center gap-2 w-full rounded-xl border-2 border-primary/30 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10 hover:border-primary transition-colors"
                     >
-                      {content}
+                      <MapPin className="w-4 h-4 shrink-0" />
+                      {fallback.allMapButton}
                     </a>
-                  ) : (
-                    <div key={key} className={cardClass}>
-                      {content}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,7 @@
 from app.extensions import db
 
-
 class Material(db.Model):
     __tablename__ = "materials"
-
     id = db.Column(db.Integer, primary_key=True)
     slug = db.Column(db.String(160), unique=True, nullable=False, index=True)
     title = db.Column(db.String(300), nullable=False)
@@ -14,7 +12,6 @@ class Material(db.Model):
     source_note = db.Column(db.String(500))
     file_name = db.Column(db.String(300))
     key_points_json = db.Column(db.JSON)
-
     def to_dict(self, include_content=False):
         data = {
             "id": self.id,

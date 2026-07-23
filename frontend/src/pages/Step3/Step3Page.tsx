@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { User, ChevronLeft, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -7,12 +7,42 @@ import { useNavigationStore } from '@/store/navigationStore';
 import { algorithmsApi } from '@/api';
 import AlgorithmToggle from '@/components/ui/AlgorithmToggle';
 import type { AlgorithmGroup, AlgorithmStep } from '@/types';
+import { splitHighlightParts } from '@/utils/textHighlight';
 
 type UiStep = AlgorithmStep & { dbId?: number };
 
+const HighlightedText: React.FC<{ text: string; query: string | null; className?: string }> = ({
+  text,
+  query,
+  className,
+}) => {
+  if (!query?.trim()) return <span className={className}>{text}</span>;
+  const parts = splitHighlightParts(text, query);
+  return (
+    <span className={className}>
+      {parts.map((p, i) =>
+        p.hit ? (
+          <mark
+            key={i}
+            className="atlas-search-hl rounded-sm px-0.5"
+            style={{ backgroundColor: '#fde68a', color: 'inherit' }}
+          >
+            {p.text}
+          </mark>
+        ) : (
+          <React.Fragment key={i}>{p.text}</React.Fragment>
+        )
+      )}
+    </span>
+  );
+};
+
 const Step3Page: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const algorithmParam = searchParams.get('algorithm');
+  const highlightQuery = searchParams.get('q');
+  const firstHitRef = useRef<HTMLDivElement | null>(null);
+  const [highlightActive, setHighlightActive] = useState(Boolean(highlightQuery?.trim()));
 
   const [groups, setGroups] = useState<AlgorithmGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +94,7 @@ const Step3Page: React.FC = () => {
         setActiveGroupId(groupId);
         setActiveAlgorithmId(algoId);
       } catch {
-        if (!cancelled) setLoadError('Не удалось загрузить алгоритмы с сервера');
+        if (!cancelled) setLoadError('Не удалось загрузить пошаговые инструкции с сервера');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -73,6 +103,30 @@ const Step3Page: React.FC = () => {
       cancelled = true;
     };
   }, [algorithmParam, setCheckedAlgorithmSteps]);
+
+  useEffect(() => {
+    setHighlightActive(Boolean(highlightQuery?.trim()));
+  }, [highlightQuery, activeAlgorithmId]);
+
+  useEffect(() => {
+    if (!highlightActive || !highlightQuery?.trim() || loading) return;
+    const timer = window.setTimeout(() => {
+      firstHitRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [highlightActive, highlightQuery, loading, groups, activeAlgorithmId]);
+
+  useEffect(() => {
+    if (!highlightActive) return;
+    const clear = () => {
+      setHighlightActive(false);
+      const next = new URLSearchParams(searchParams);
+      next.delete('q');
+      setSearchParams(next, { replace: true });
+    };
+    document.addEventListener('pointerdown', clear, true);
+    return () => document.removeEventListener('pointerdown', clear, true);
+  }, [highlightActive, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (location.state) {
@@ -160,7 +214,7 @@ const Step3Page: React.FC = () => {
     } else if (link.type === 'step2') {
       setAlgorithmsBackRoute({
         path: '/app/step3',
-        label: 'Назад к алгоритму продажи',
+        label: 'Назад к пошаговым инструкциям',
         state: { activeAlgorithm: activeAlgorithmId },
       });
       navigate('/app/step2');
@@ -203,15 +257,17 @@ const Step3Page: React.FC = () => {
   const handlePrevStep = () => navigate('/app/step2');
   const handleNextStep = () => navigate('/app/materials');
 
-  const totalMainSteps = currentSteps.filter((step) => !step.isSubStep).length;
+  const isProgressStep = (step: { id: string }) => !step.id.includes('title');
+
+  const totalMainSteps = currentSteps.filter(isProgressStep).length;
   const completedMainSteps = currentSteps.filter(
-    (step) => !step.isSubStep && currentChecked.includes(step.id)
+    (step) => isProgressStep(step) && currentChecked.includes(step.id)
   ).length;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-text-muted font-medium">Загрузка алгоритмов…</p>
+        <p className="text-text-muted font-medium">Загрузка инструкций…</p>
       </div>
     );
   }
@@ -221,7 +277,7 @@ const Step3Page: React.FC = () => {
       <div className="flex items-center justify-center h-full p-6">
         <div className="max-w-md rounded-xl border-2 border-red-200 bg-red-50 p-6 text-center">
           <p className="text-red-700 font-medium mb-2">
-            {loadError || 'Алгоритмы не найдены'}
+            {loadError || 'Пошаговые инструкции не найдены'}
           </p>
           <p className="text-sm text-red-600">
             Добавьте JSON в{' '}
@@ -238,17 +294,23 @@ const Step3Page: React.FC = () => {
       <div className="w-64 shrink-0 bg-white border-r-2 border-border p-4 overflow-y-auto flex flex-col">
         <div className="mb-4">
           <p className="text-sm uppercase tracking-wider text-primary font-bold mb-1">Шаг 3</p>
-          <p className="text-base text-text-secondary font-medium">Алгоритмы</p>
+          <p className="text-base text-text-secondary font-medium">Пошаговые инструкции</p>
         </div>
 
         <div className="space-y-1 flex-1">
           {groups.map((group) => {
             const isGroupActive = group.id === activeGroupId;
             const totalChecked = group.algorithms.reduce((sum, alg) => {
-              return sum + (checkedAlgorithms[alg.id] || []).length;
+              const checked = checkedAlgorithms[alg.id] || [];
+              return (
+                sum +
+                alg.steps.filter(
+                  (step) => !step.id.includes('title') && checked.includes(step.id)
+                ).length
+              );
             }, 0);
             const totalSteps = group.algorithms.reduce((sum, alg) => {
-              return sum + alg.steps.filter((step) => !step.isSubStep).length;
+              return sum + alg.steps.filter((step) => !step.id.includes('title')).length;
             }, 0);
 
             return (
@@ -358,13 +420,28 @@ const Step3Page: React.FC = () => {
         )}
 
         <div className="space-y-2">
-          {currentSteps.map((step) => {
+          {(() => {
+            const activeQ = highlightActive ? highlightQuery : null;
+            const firstMatchId =
+              activeQ?.trim()
+                ? currentSteps.find(
+                    (step) =>
+                      splitHighlightParts(step.text, activeQ).some((p) => p.hit) ||
+                      Boolean(
+                        step.description &&
+                          splitHighlightParts(step.description, activeQ).some((p) => p.hit)
+                      )
+                  )?.id
+                : undefined;
+
+            return currentSteps.map((step) => {
             const done = currentChecked.includes(step.id);
             const isTitle = step.id.includes('title');
 
             return (
               <div
                 key={step.id}
+                ref={step.id === firstMatchId ? firstHitRef : undefined}
                 className={`flex flex-col gap-1 p-4 rounded-xl border-2 transition-all ${
                   isTitle
                     ? 'border-primary/30 bg-primary/5'
@@ -405,22 +482,22 @@ const Step3Page: React.FC = () => {
                   {isTitle && <div className="w-5 shrink-0" />}
 
                   <div className="flex-1">
-                    <span
+                    <HighlightedText
+                      text={step.text}
+                      query={activeQ}
                       className={`${
                         isTitle
                           ? 'text-lg font-bold text-primary'
                           : `text-base ${done ? 'text-text-muted line-through' : 'text-text-primary'}`
                       } leading-relaxed`}
-                    >
-                      {step.text}
-                    </span>
+                    />
 
                     {step.description && (
-                      <p
-                        className={`text-sm ${isTitle ? 'text-text-secondary' : 'text-text-muted'} mt-1 ${done ? 'opacity-70' : ''}`}
-                      >
-                        {step.description}
-                      </p>
+                      <HighlightedText
+                        text={step.description}
+                        query={activeQ}
+                        className={`block text-sm ${isTitle ? 'text-text-secondary' : 'text-text-muted'} mt-1 ${done ? 'opacity-70' : ''}`}
+                      />
                     )}
 
                     {step.link && (
@@ -436,7 +513,8 @@ const Step3Page: React.FC = () => {
                 </div>
               </div>
             );
-          })}
+          });
+          })()}
         </div>
       </div>
     </div>

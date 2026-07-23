@@ -109,7 +109,7 @@ export function mapBackendSurrounding(raw: {
     type,
     impact: hint.impact,
     tip: hint.tip,
-    link: hint.link,
+    link: hint.link ?? null,
   };
 }
 

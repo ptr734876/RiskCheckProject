@@ -1,9 +1,7 @@
-
 from flask import Blueprint, request
 from flask_login import current_user, login_user, logout_user
 from app.extensions import db
 from app.models import User
-
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 def body():

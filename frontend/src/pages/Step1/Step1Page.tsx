@@ -18,7 +18,8 @@ import MapView, {
   type MapCenter,
   type MapMarker,
 } from '@/components/ui/MapView';
-import { mapApi, propertiesApi } from '@/api';
+import { mapApi, propertiesApi, userGeoApi } from '@/api';
+import { useAuthStore } from '@/store/authStore';
 import {
   mapBackendProperty,
   mapBackendSurrounding,
@@ -30,7 +31,7 @@ import type { Property, SurroundingItem as SurroundingItemData } from '@/types';
 import {
   resolveLegalHint,
   resolveSurroundingHint,
-  LEGAL_UNAVAILABLE,
+  getLegalUnavailable,
 } from '@/data/hints';
 
 interface OverviewPin {
@@ -216,7 +217,7 @@ function buildExternalProperty(
     ([label, value]) => ({
       label,
       value: String(value),
-      impact: LEGAL_UNAVAILABLE.impact,
+      impact: getLegalUnavailable().impact,
       tip: 'Поле получено из публичной кадастровой карты. Сверьте с выпиской ЕГРН.',
       link: null,
     })
@@ -256,9 +257,12 @@ const Step1Page: React.FC = () => {
   } | null>(null);
   const [isTooltipHovered, setIsTooltipHovered] = useState(false);
   const [searchedEmpty, setSearchedEmpty] = useState(false);
+
   const [geoFailed, setGeoFailed] = useState<string[]>([]);
   const [radiusM, setRadiusM] = useState(3000);
+
   const [cadastralError, setCadastralError] = useState<string | null>(null);
+
   const [cadastralMessage, setCadastralMessage] = useState<string | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const legalTimeoutRef = useRef<number | null>(null);
@@ -270,7 +274,47 @@ const Step1Page: React.FC = () => {
   } = useNavigationStore();
   const navigate = useNavigate();
   const location = useLocation();
+
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
+  const setStep1Snapshot = useAppStore((s) => s.setStep1Snapshot);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  const saveSnapshot = (partial: {
+    searchQuery: string;
+    selectedProperty: Property;
+    mapCenter: MapCenter | null;
+    mapMarkers: MapMarker[];
+    clickedPoint: { x: number; y: number } | null;
+    geoFailed?: string[];
+    radiusM?: number;
+    cadastralError?: string | null;
+    cadastralMessage?: string | null;
+  }) => {
+    const snapshot = {
+      searchQuery: partial.searchQuery,
+      selectedProperty: partial.selectedProperty,
+      mapCenter: partial.mapCenter,
+      mapMarkers: partial.mapMarkers,
+      clickedPoint: partial.clickedPoint,
+      geoFailed: partial.geoFailed ?? [],
+      radiusM: partial.radiusM ?? 3000,
+      cadastralError: partial.cadastralError ?? null,
+      cadastralMessage: partial.cadastralMessage ?? null,
+    };
+    setStep1Snapshot(snapshot);
+    if (isAuthenticated && partial.mapCenter) {
+      void userGeoApi
+        .save({
+          address: partial.selectedProperty.address,
+          latitude: partial.mapCenter.latitude,
+          longitude: partial.mapCenter.longitude,
+          searchQuery: partial.searchQuery,
+          radiusM: snapshot.radiusM,
+          step1: snapshot,
+        })
+        .catch(() => undefined);
+    }
+  };
 
   const showOverview = (pins: OverviewPin[], center: MapCenter) => {
     setMapCenter(center);
@@ -313,17 +357,25 @@ const Step1Page: React.FC = () => {
       setSearchQuery(addressHint || property.address);
       setMapCenter(center);
       setMapMarkers(markers);
+      let pin: { x: number; y: number } | null = null;
       if (center.latitude && center.longitude) {
         setSelectedLocation({
           address: property.address,
           latitude: center.latitude,
           longitude: center.longitude,
         });
-      }
-      if (center.latitude && center.longitude) {
-        const pin = projectToMap(center.latitude, center.longitude, center);
+        pin = projectToMap(center.latitude, center.longitude, center);
         setClickedPoint(pin);
       }
+      saveSnapshot({
+        searchQuery: addressHint || property.address,
+        selectedProperty: property,
+        mapCenter: center,
+        mapMarkers: markers,
+        clickedPoint: pin,
+        cadastralError: null,
+        cadastralMessage: null,
+      });
     } catch {
       setLoadError('Не удалось загрузить объект');
       setSelectedProperty(null);
@@ -334,8 +386,103 @@ const Step1Page: React.FC = () => {
   };
 
   useEffect(() => {
+    const applySnap = (
+      snap: NonNullable<ReturnType<typeof useAppStore.getState>['step1Snapshot']>
+    ) => {
+      const markers = [...(snap.mapMarkers || [])];
+      if (
+        !markers.some((m) => m.type === 'property') &&
+        snap.mapCenter
+      ) {
+        markers.unshift({
+          type: 'property',
+          label: snap.selectedProperty.address,
+          latitude: snap.mapCenter.latitude,
+          longitude: snap.mapCenter.longitude,
+          propertyId: snap.selectedProperty.id,
+        });
+      }
+      setSelectedProperty(snap.selectedProperty);
+      setSearchQuery(snap.searchQuery);
+      setMapCenter(snap.mapCenter);
+      setMapMarkers(markers);
+      setClickedPoint(snap.clickedPoint);
+      setGeoFailed(snap.geoFailed);
+      setRadiusM(snap.radiusM);
+      setCadastralError(snap.cadastralError);
+      setCadastralMessage(snap.cadastralMessage);
+      if (snap.mapCenter) {
+        setSelectedLocation({
+          address: snap.selectedProperty.address,
+          latitude: snap.mapCenter.latitude,
+          longitude: snap.mapCenter.longitude,
+        });
+      }
+    };
+
+    const restoreFromStoreOrServer = async () => {
+      const snap = useAppStore.getState().step1Snapshot;
+      if (snap?.selectedProperty) {
+        applySnap(snap);
+        return true;
+      }
+      if (!useAuthStore.getState().isAuthenticated) return false;
+      try {
+        const { data } = await userGeoApi.get();
+        const step1 = data.state?.step1;
+        if (!step1?.selectedProperty) {
+          // Есть только координаты — покажем точку и подтянем карточку через lookup
+          const lat = data.state?.latitude;
+          const lon = data.state?.longitude;
+          if (lat == null || lon == null) return false;
+          if (useAppStore.getState().step1Snapshot?.selectedProperty) return true;
+          setMapCenter({ latitude: lat, longitude: lon });
+          setMapMarkers([
+            {
+              type: 'property',
+              label: data.state?.address || data.state?.searchQuery || 'Сохранённая точка',
+              latitude: lat,
+              longitude: lon,
+            },
+          ]);
+          setSelectedLocation({
+            address: data.state?.address || data.state?.searchQuery || 'Сохранённая точка',
+            latitude: lat,
+            longitude: lon,
+          });
+          setSearchQuery(data.state?.searchQuery || data.state?.address || '');
+          return true;
+        }
+        if (useAppStore.getState().step1Snapshot?.selectedProperty) return true;
+        setStep1Snapshot(step1);
+        applySnap(step1);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     let cancelled = false;
-    (async () => {
+
+    const run = async () => {
+      const waitHydration = () =>
+        new Promise<void>((resolve) => {
+          if (useAppStore.persist.hasHydrated()) {
+            resolve();
+            return;
+          }
+          const unsub = useAppStore.persist.onFinishHydration(() => {
+            unsub();
+            resolve();
+          });
+        });
+
+      await waitHydration();
+      if (cancelled) return;
+
+      const restored = await restoreFromStoreOrServer();
+      if (cancelled) return;
+
       setLoading(true);
       try {
         const { data } = await propertiesApi.getAll();
@@ -368,17 +515,24 @@ const Step1Page: React.FC = () => {
         );
         if (cancelled) return;
         setOverviewPins(pins);
-        if (!selectedProperty) showOverview(pins, center);
+
+        const hasSelection =
+          restored ||
+          Boolean(useAppStore.getState().step1Snapshot?.selectedProperty) ||
+          Boolean(useAppStore.getState().selectedLocation);
+        if (!hasSelection) showOverview(pins, center);
       } catch {
         if (!cancelled) setLoadError('Не удалось загрузить объекты с сервера');
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
+    };
+
+    void run();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated, setSelectedLocation, setStep1Snapshot]);
 
   useEffect(() => {
     if (location.state) {
@@ -419,7 +573,6 @@ const Step1Page: React.FC = () => {
     };
   }, []);
 
-  
   const applyLookup = async (
     query: string,
     coords?: { lat: number; lon: number },
@@ -430,6 +583,7 @@ const Step1Page: React.FC = () => {
     setSearchedEmpty(false);
     setGeoFailed([]);
     try {
+
       const cacheKey = coords
         ? `${coords.lat.toFixed(4)},${coords.lon.toFixed(4)}`
         : query;
@@ -440,6 +594,7 @@ const Step1Page: React.FC = () => {
       const cachedCadastral = options?.force
         ? null
         : readCache<any>('cadastral', cacheKey);
+
       let data: any;
 
       if (cachedBase && cachedCadastral) {
@@ -494,13 +649,31 @@ const Step1Page: React.FC = () => {
       setCadastralError(data.cadastral ? null : data.cadastral_error || null);
       setCadastralMessage(data.cadastral ? null : data.cadastral_message || null);
 
+      const markers = data.markers || [];
+      const pin = projectToMap(center.latitude, center.longitude, center);
+      const failed = data.failed || [];
+      const radius = data.radius_m || 3000;
+      const cadErr = data.cadastral ? null : data.cadastral_error || null;
+      const cadMsg = data.cadastral ? null : data.cadastral_message || null;
+
       setSelectedProperty(property);
       setSearchQuery(data.address || query);
       setMapCenter(center);
-      setMapMarkers(data.markers || []);
-      setGeoFailed(data.failed || []);
-      setRadiusM(data.radius_m || 3000);
-      setClickedPoint(projectToMap(center.latitude, center.longitude, center));
+      setMapMarkers(markers);
+      setGeoFailed(failed);
+      setRadiusM(radius);
+      setClickedPoint(pin);
+      saveSnapshot({
+        searchQuery: data.address || query,
+        selectedProperty: property,
+        mapCenter: center,
+        mapMarkers: markers,
+        clickedPoint: pin,
+        geoFailed: failed,
+        radiusM: radius,
+        cadastralError: cadErr,
+        cadastralMessage: cadMsg,
+      });
     } catch (e: any) {
       const status = e?.response?.status;
       const message = e?.response?.data?.message;
@@ -524,6 +697,8 @@ const Step1Page: React.FC = () => {
       setSelectedProperty(null);
       setClickedPoint(null);
       setSearchedEmpty(false);
+      setStep1Snapshot(null);
+      setSelectedLocation(null);
       if (overviewPins.length) {
         const center = mapCenter || {
           latitude: overviewPins[0].latitude,
@@ -540,7 +715,6 @@ const Step1Page: React.FC = () => {
     if (q) void applyLookup(q);
   };
 
- 
   const handleGeoClick = async (lat: number, lon: number) => {
     const nearbyKnown = overviewPins.find(
       (p) => Math.abs(p.latitude - lat) < 0.0015 && Math.abs(p.longitude - lon) < 0.0025
@@ -549,6 +723,7 @@ const Step1Page: React.FC = () => {
       void selectPropertyById(nearbyKnown.id, nearbyKnown.address);
       return;
     }
+
     await applyLookup(`${lon.toFixed(6)},${lat.toFixed(6)}`, { lat, lon });
   };
 
@@ -733,7 +908,7 @@ const Step1Page: React.FC = () => {
                     {cadastralMessage
                       ? cadastralMessage
                       : cadastralError === 'unavailable'
-                        ? 'Сервис кадастровых данных не запущен, поэтому поля ниже пустые. Запустите парсер (utils/parser) и повторите поиск.'
+                        ? 'Сервис кадастровых данных не запущен, поэтому поля ниже пустые. Запустите парсер (atlas-sales-backend/rosreestr-parser) и повторите поиск.'
                         : 'По этим координатам участок в публичной кадастровой карте не найден. Для точных сведений закажите выписку ЕГРН.'}
                   </div>
                 )}

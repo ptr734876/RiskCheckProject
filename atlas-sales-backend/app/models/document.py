@@ -1,9 +1,7 @@
 from app.extensions import db
 
-
 class Document(db.Model):
     __tablename__ = "documents"
-
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(80), unique=True, nullable=False, index=True)
     title = db.Column(db.String(250), nullable=False)
@@ -18,7 +16,6 @@ class Document(db.Model):
     article_id = db.Column(db.String(80))
     conditions_json = db.Column(db.JSON)
     sort_order = db.Column(db.Integer, nullable=False, default=1)
-
     def to_dict(self):
         notes = self.notes_json
         if not notes:
@@ -41,7 +38,6 @@ class Document(db.Model):
             "conditions": self.conditions_json,
             "sort_order": self.sort_order,
         }
-
 
 class UserDocument(db.Model):
     __tablename__ = "user_documents"

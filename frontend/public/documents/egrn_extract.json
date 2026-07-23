@@ -10,7 +10,7 @@
   "required": false,
   "sourceId": "mfc",
   "algorithmId": "encumbrances",
-  "articleId": null,
+  "articleId": "Зачем_нужна_выписка_из_ЕГРН",
   "conditions": null,
   "order": 3
 }

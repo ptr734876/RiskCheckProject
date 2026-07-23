@@ -1,12 +1,8 @@
 from __future__ import annotations
-
 from typing import Protocol
-
 from app.extensions import db
 from app.models import Property
 from app.risks.services import build_property_analysis
-
-
 _DEMO_PLACE_CATEGORIES = [
     {
         "id": "mfc",
@@ -48,12 +44,9 @@ _DEMO_PLACE_CATEGORIES = [
     },
 ]
 
-
 class MapDataProvider(Protocol):
     def get_property_map(self, property_id: int) -> dict | None: ...
-
     def search(self, query: str) -> dict: ...
-
 
 def _markers_for(item: Property) -> list[dict]:
     markers = [
@@ -76,7 +69,6 @@ def _markers_for(item: Property) -> list[dict]:
             }
         )
     return markers
-
 
 def _surroundings_for(item: Property) -> list[dict]:
     analysis = build_property_analysis(item)
@@ -113,7 +105,6 @@ def _surroundings_for(item: Property) -> list[dict]:
         )
     return items
 
-
 class DemoMapDataProvider:
     def get_property_map(self, property_id: int) -> dict | None:
         item = db.session.get(Property, property_id)
@@ -127,7 +118,6 @@ class DemoMapDataProvider:
             "surroundings": _surroundings_for(item),
             "place_categories": list(_DEMO_PLACE_CATEGORIES),
         }
-
     def search(self, query: str) -> dict:
         q = (query or "").strip()
         stmt = db.select(Property).order_by(Property.id)
@@ -147,18 +137,6 @@ class DemoMapDataProvider:
                 }
             )
         return {"source": "demo", "query": q, "items": results}
-
-
-class ExternalMapApiProvider:
-    def __init__(self, fallback: MapDataProvider | None = None):
-        self._fallback = fallback or DemoMapDataProvider()
-
-    def get_property_map(self, property_id: int) -> dict | None:
-        return self._fallback.get_property_map(property_id)
-
-    def search(self, query: str) -> dict:
-        return self._fallback.search(query)
-
 
 def get_map_provider() -> MapDataProvider:
     return DemoMapDataProvider()

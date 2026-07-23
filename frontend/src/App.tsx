@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import MainLayout from './components/layout/MainLayout';
 import { pruneCache } from './utils/geoCache';
+import { loadHints } from './data/hints';
 import HomePage from './pages/Home/HomePage';
 import AuthPage from './pages/Auth/AuthPage';
 import SurveyPage from './pages/Survey/SurveyPage';
@@ -13,15 +14,15 @@ import MaterialsPage from './pages/Materials/MaterialsPage';
 
 const App: React.FC = () => {
   const { isAuthenticated, user, isBootstrapping, bootstrap } = useAuthStore();
+  const [hintsReady, setHintsReady] = useState(false);
 
   useEffect(() => {
     void bootstrap();
-    // Убираем просроченные записи геокэша, чтобы localStorage
-    // не разрастался между сессиями.
     pruneCache();
+    void loadHints().finally(() => setHintsReady(true));
   }, [bootstrap]);
 
-  if (isBootstrapping) {
+  if (isBootstrapping || !hintsReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <p className="text-text-secondary font-medium">Загрузка…</p>

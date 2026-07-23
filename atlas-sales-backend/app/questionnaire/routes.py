@@ -1,18 +1,14 @@
-
 from flask import Blueprint, request
 from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import QuestionnaireResponse, SurveySchema
-
 bp = Blueprint("questionnaire", __name__, url_prefix="/api/questionnaire")
-
 ALLOWED = {
     "owners_count": {"one", "multiple", "unknown"},
     "property_type": {"apartment", "house", "commercial"},
     "redevelopment": {"legalized", "unauthorized", "none"},
     "sale_urgency": {"asap", "three_months", "best_price"},
 }
-
 
 def get_or_create():
     response = current_user.questionnaire
@@ -21,7 +17,6 @@ def get_or_create():
         db.session.add(response)
         db.session.flush()
     return response
-
 
 @bp.get("/schema")
 def get_survey_schema():
@@ -32,14 +27,12 @@ def get_survey_schema():
         return {"error": "survey_schema_not_found"}, 404
     return {"schema": schema.to_dict()}
 
-
 @bp.get("")
 @login_required
 def get_questionnaire():
     response = get_or_create()
     db.session.commit()
     return {"questionnaire": response.to_dict()}
-
 
 @bp.put("")
 @login_required

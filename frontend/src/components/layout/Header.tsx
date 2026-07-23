@@ -2,6 +2,7 @@ import React from 'react';
 import { Building2, LogIn, User, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
+import GlobalSearch from './GlobalSearch';
 
 const Header: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
@@ -13,18 +14,20 @@ const Header: React.FC = () => {
 
   return (
     <header className="bg-white border-b border-border">
-      <div className="flex items-center justify-between px-6 h-14">
+      <div className="flex items-center justify-between px-6 h-14 gap-2">
         <button
           onClick={handleLogoClick}
-          className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
         >
           <Building2 className="w-5 h-5 text-primary" strokeWidth={1.5} />
-          <span className="font-display font-semibold text-text-primary">
+          <span className="font-display font-semibold text-text-primary hidden sm:inline">
             Атлас продаж
           </span>
         </button>
 
-        <div className="flex items-center gap-3">
+        <GlobalSearch />
+
+        <div className="flex items-center gap-3 shrink-0">
           {!isAuthenticated && !user?.isGuest && (
             <button
               onClick={() => navigate('/auth')}
@@ -41,7 +44,9 @@ const Header: React.FC = () => {
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <User className="w-4 h-4 text-primary" />
                 </div>
-                <span className="font-medium">{user?.fullName || 'Пользователь'}</span>
+                <span className="font-medium hidden md:inline">
+                  {user?.fullName || 'Пользователь'}
+                </span>
               </div>
               <button
                 onClick={() => {
@@ -50,7 +55,7 @@ const Header: React.FC = () => {
                 className="btn-ghost text-sm flex items-center gap-2"
               >
                 <LogOut className="w-4 h-4" />
-                Выйти
+                <span className="hidden sm:inline">Выйти</span>
               </button>
             </div>
           )}

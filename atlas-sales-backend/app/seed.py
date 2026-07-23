@@ -1,7 +1,6 @@
 from app.extensions import db
 from app.models import NearbyObject, Property
 
-
 def get_or_create(model, defaults=None, **lookup):
     item = db.session.scalar(db.select(model).filter_by(**lookup))
     if item is not None:
@@ -12,7 +11,6 @@ def get_or_create(model, defaults=None, **lookup):
     db.session.add(item)
     db.session.flush()
     return item, True
-
 
 def seed_demo_data():
     prop, _ = get_or_create(
@@ -33,7 +31,6 @@ def seed_demo_data():
             "longitude": 30.3351,
         },
     )
-
     nearby = [
         ("metro", "Метро «Садовая»", "positive", 300, 59.9327, 30.3297),
         ("kindergarten", "Детский сад №15", "positive", 500, 59.9360, 30.3380),
@@ -62,8 +59,6 @@ def seed_demo_data():
                     longitude=lon,
                 )
             )
-
     from app.content_seed import seed_content
-
     seed_content()
     db.session.commit()

@@ -23,11 +23,6 @@ export const propertiesApi = {
   lookup: (query: string) => api.get('/properties/lookup', { params: { q: query } }),
 };
 
-export const risksApi = {
-  getForProperty: (propertyId: number) =>
-    api.get(`/risks/property/${propertyId}`),
-};
-
 export const documentsApi = {
   getAll: () => api.get('/documents'),
   getSources: () => api.get('/documents/sources'),
@@ -51,37 +46,46 @@ export const materialsApi = {
   getBySlug: (slug: string) => api.get(`/materials/by-slug/${slug}`),
   fileUrl: (id: number) => `/api/materials/${id}/file`,
 };
-export const helpfulApi = materialsApi;
 
 export const mapApi = {
   search: (query: string) => api.get('/map/search', { params: { q: query } }),
   getPropertyContext: (propertyId: number) =>
     api.get(`/map/property/${propertyId}`),
-  getMarkers: (propertyId: number) =>
-    api.get(`/map/property/${propertyId}/markers`),
-  getPlaceCategories: (propertyId?: number) =>
-    api.get('/map/document-points', {
-      params: propertyId != null ? { property_id: propertyId } : undefined,
-    }),
   lookup: (query: string) => api.get('/map/lookup', { params: { q: query } }),
-  /** Поиск произвольного адреса: Яндекс.Геокодер + окружение из OpenStreetMap. */
   geoLookup: (query: string, coords?: { lat: number; lon: number }) =>
     api.get('/map/geo-lookup', {
       params: coords ? { q: query, lat: coords.lat, lon: coords.lon } : { q: query },
     }),
   getConfig: () => api.get('/map/config'),
-  /** Ближайшие МФЦ и офисы Росреестра по координатам объекта. */
   getOffices: (lat: number, lon: number, radius?: number) =>
     api.get('/map/offices', { params: { lat, lon, radius } }),
 };
-
-export const mfcApi = mapApi;
 
 export const surveyApi = {
   getSchema: () => api.get('/questionnaire/schema'),
   getData: () => api.get('/questionnaire'),
   submit: (payload: Record<string, unknown>) =>
     api.put('/questionnaire', payload),
+};
+
+export type SearchHit = {
+  type: 'article' | 'algorithm';
+  id: string;
+  title: string;
+  subtitle?: string;
+  score?: number;
+};
+
+export const searchApi = {
+  query: (q: string) =>
+    api.get<{ items: SearchHit[]; query: string }>('/search', { params: { q } }),
+  corpus: () =>
+    api.get<{ items: Array<SearchHit & { text?: string }> }>('/search/corpus'),
+};
+
+export const userGeoApi = {
+  get: () => api.get('/user-geo'),
+  save: (payload: Record<string, unknown>) => api.put('/user-geo', payload),
 };
 
 export default api;

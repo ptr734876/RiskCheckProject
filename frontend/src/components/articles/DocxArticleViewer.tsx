@@ -1,16 +1,28 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { renderAsync } from 'docx-preview';
+import {
+  attachHighlightClearOnce,
+  clearSearchHighlights,
+  highlightSearchInElement,
+} from '@/utils/textHighlight';
 
 interface DocxArticleViewerProps {
   fileUrl: string;
+  highlightQuery?: string | null;
   className?: string;
 }
 
-const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({ fileUrl, className = '' }) => {
+const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({
+  fileUrl,
+  highlightQuery,
+  className = '',
+}) => {
   const bodyRef = useRef<HTMLDivElement>(null);
   const styleRef = useRef<HTMLDivElement>(null);
+  const clearRef = useRef<(() => void) | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const bodyContainer = bodyRef.current;
@@ -22,7 +34,9 @@ const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({ fileUrl, classNam
 
     const load = async () => {
       setLoading(true);
+      setReady(false);
       setError(null);
+      clearSearchHighlights(bodyContainer);
       bodyContainer.innerHTML = '';
       styleContainer.innerHTML = '';
 
@@ -33,7 +47,6 @@ const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({ fileUrl, classNam
         }
 
         const blob = await response.blob();
-
         if (cancelled) return;
 
         await renderAsync(blob, bodyContainer, styleContainer, {
@@ -55,7 +68,7 @@ const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({ fileUrl, classNam
           (table as HTMLElement).style.maxWidth = '100%';
           (table as HTMLElement).style.tableLayout = 'fixed';
           (table as HTMLElement).style.wordWrap = 'break-word';
-          
+
           const cells = table.querySelectorAll('td, th');
           cells.forEach((cell) => {
             (cell as HTMLElement).style.wordWrap = 'break-word';
@@ -64,6 +77,7 @@ const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({ fileUrl, classNam
           });
         });
 
+        if (!cancelled) setReady(true);
       } catch (err) {
         if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
         setError(err instanceof Error ? err.message : 'Ошибка загрузки документа');
@@ -72,13 +86,40 @@ const DocxArticleViewer: React.FC<DocxArticleViewerProps> = ({ fileUrl, classNam
       }
     };
 
-    load();
+    void load();
 
     return () => {
       cancelled = true;
       controller.abort();
+      clearRef.current?.();
+      clearRef.current = null;
     };
   }, [fileUrl]);
+
+  useEffect(() => {
+    const bodyContainer = bodyRef.current;
+    if (!bodyContainer || !ready) return;
+
+    clearRef.current?.();
+    clearRef.current = null;
+    clearSearchHighlights(bodyContainer);
+
+    const q = (highlightQuery || '').trim();
+    if (!q) return;
+
+    const timer = window.setTimeout(() => {
+      const first = highlightSearchInElement(bodyContainer, q);
+      if (first) {
+        clearRef.current = attachHighlightClearOnce(bodyContainer);
+      }
+    }, 80);
+
+    return () => {
+      window.clearTimeout(timer);
+      clearRef.current?.();
+      clearRef.current = null;
+    };
+  }, [ready, highlightQuery, fileUrl]);
 
   return (
     <div className={`relative ${className}`}>

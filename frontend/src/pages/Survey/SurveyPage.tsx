@@ -55,6 +55,11 @@ const SurveyPage: React.FC = () => {
       try {
         const { data } = await surveyApi.getData();
         if (cancelled) return;
+        if (data.questionnaire?.completed) {
+          setSurveyCompleted(true);
+          navigate('/app', { replace: true });
+          return;
+        }
         const answers = data.questionnaire?.answers;
         if (answers && typeof answers === 'object' && Object.keys(answers).length > 0) {
           setFormData((prev) => ({ ...answers, ...prev }));
@@ -66,7 +71,7 @@ const SurveyPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [navigate, setSurveyCompleted]);
 
   const currentStep = steps && steps.length > 0 ? steps[currentStepIndex] : null;
   const totalSteps = steps.length;
@@ -92,7 +97,7 @@ const SurveyPage: React.FC = () => {
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const allVisibleAnswered = visibleQuestions.every(
       (question) => formData[question.id] && formData[question.id].trim() !== ''
     );

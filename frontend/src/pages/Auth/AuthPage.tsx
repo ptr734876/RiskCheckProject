@@ -4,6 +4,24 @@ import { useAuthStore } from '@/store/authStore';
 import { Building2, ArrowLeft } from 'lucide-react';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
+import { surveyApi } from '@/api';
+import { useAppStore } from '@/store/appStore';
+
+async function routeAfterAuth(navigate: (path: string) => void) {
+  const setSurveyCompleted = useAppStore.getState().setSurveyCompleted;
+  try {
+    const { data } = await surveyApi.getData();
+    if (data.questionnaire?.completed) {
+      setSurveyCompleted(true);
+      navigate('/app');
+      return;
+    }
+  } catch {
+    // fall through to survey
+  }
+  setSurveyCompleted(false);
+  navigate('/survey');
+}
 
 const AuthPage: React.FC = () => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -13,16 +31,19 @@ const AuthPage: React.FC = () => {
   const handleLogin = async (email: string, password: string) => {
     try {
       await login(email, password);
-      navigate('/survey');
-    } catch (err) {
+      await routeAfterAuth(navigate);
+    } catch {
+      // error shown via store
     }
   };
 
   const handleRegister = async (fullName: string, email: string, password: string) => {
     try {
       await register(fullName, email, password);
-      navigate('/survey');
-    } catch (err) {}
+      await routeAfterAuth(navigate);
+    } catch {
+      // error shown via store
+    }
   };
 
   const handleGuest = async () => {
@@ -53,7 +74,10 @@ const AuthPage: React.FC = () => {
           {mode === 'login' ? (
             <LoginForm
               onSubmit={handleLogin}
-              onSwitchToRegister={() => { setMode('register'); clearError(); }}
+              onSwitchToRegister={() => {
+                setMode('register');
+                clearError();
+              }}
               onGuestAccess={handleGuest}
               isLoading={isLoading}
               error={error}
@@ -61,7 +85,10 @@ const AuthPage: React.FC = () => {
           ) : (
             <RegisterForm
               onSubmit={handleRegister}
-              onSwitchToLogin={() => { setMode('login'); clearError(); }}
+              onSwitchToLogin={() => {
+                setMode('login');
+                clearError();
+              }}
               isLoading={isLoading}
               error={error}
             />

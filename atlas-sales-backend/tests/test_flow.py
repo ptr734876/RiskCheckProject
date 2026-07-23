@@ -1,4 +1,3 @@
-
 def register(client):
     response = client.post("/api/auth/register", json={
         "full_name":"Ирина Иванова",

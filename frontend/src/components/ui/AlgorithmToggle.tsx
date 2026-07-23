@@ -28,7 +28,7 @@ const AlgorithmToggle: React.FC<AlgorithmToggleProps> = ({
     { id: 'middle2', label: middle2Label },
     { id: 'middle3', label: middle3Label },
     { id: 'right', label: rightLabel },
-  ].filter((pos): pos is { id: string; label: string } => 
+  ].filter((pos): pos is { id: string; label: string } =>
     pos.label !== undefined && pos.label !== ''
   );
 
@@ -37,12 +37,12 @@ const AlgorithmToggle: React.FC<AlgorithmToggleProps> = ({
   const safeActiveIndex = activeIndex === -1 ? 0 : activeIndex;
 
   const maxLabelLength = Math.max(...positions.map(p => p.label.length));
-  
+
   const getMinWidth = () => {
     const charWidth = 8;
     const padding = 24;
     const minWidthPerPosition = maxLabelLength * charWidth + padding;
-    const totalMinWidth = totalPositions * minWidthPerPosition + (totalPositions - 1) * 2; // + gap
+    const totalMinWidth = totalPositions * minWidthPerPosition + (totalPositions - 1) * 2;
     return Math.max(200, totalMinWidth);
   };
 
@@ -62,7 +62,7 @@ const AlgorithmToggle: React.FC<AlgorithmToggleProps> = ({
   }
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="relative inline-flex bg-slate-200 rounded-full p-1"
       style={{
@@ -78,7 +78,7 @@ const AlgorithmToggle: React.FC<AlgorithmToggleProps> = ({
           width: `calc(${100 / totalPositions}% - 4px)`,
         }}
       />
-      
+
       <div className="relative flex w-full" style={{ gap: '2px' }}>
         {positions.map((pos) => {
           const isActive = pos.id === activeId;
@@ -87,10 +87,10 @@ const AlgorithmToggle: React.FC<AlgorithmToggleProps> = ({
               key={pos.id}
               onClick={() => onToggle(pos.id)}
               className={`
-                relative z-10 px-2 py-1 font-medium rounded-full 
+                relative z-10 px-2 py-1 font-medium rounded-full
                 transition-colors duration-200 whitespace-nowrap flex-1
-                ${isActive 
-                  ? 'text-slate-900' 
+                ${isActive
+                  ? 'text-slate-900'
                   : 'text-slate-500 hover:text-slate-700'
                 }
               `}

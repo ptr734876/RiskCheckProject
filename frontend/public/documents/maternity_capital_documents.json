@@ -6,7 +6,7 @@
   ],
   "required": false,
   "sourceId": "on_hand",
-  "algorithmId": null,
+  "algorithmId": "maternal_capital",
   "articleId": null,
   "conditions": [
     {

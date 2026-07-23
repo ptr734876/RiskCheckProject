@@ -1,7 +1,6 @@
 from app.extensions import db
 from app.models import Document
 
-
 def _answers_from_user(user):
     if user is None or user.questionnaire is None:
         return {}
@@ -27,7 +26,6 @@ def _answers_from_user(user):
         answers.setdefault("propertyType", "commercial")
     return answers
 
-
 def document_matches_conditions(doc: Document, answers: dict) -> bool:
     conditions = doc.conditions_json
     if not conditions:
@@ -42,7 +40,6 @@ def document_matches_conditions(doc: Document, answers: dict) -> bool:
         if answers.get(qid) != expected:
             return False
     return True
-
 
 def get_selected_documents(user=None):
     answers = _answers_from_user(user)
