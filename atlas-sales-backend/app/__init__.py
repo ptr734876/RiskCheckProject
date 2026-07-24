@@ -1,6 +1,9 @@
-from flask import Flask, jsonify
+import os
+
+from flask import Flask, jsonify, send_from_directory
 from app.config import Config
 from app.extensions import db, login_manager, migrate
+
 
 def create_app(config_object=None):
     app = Flask(__name__)
@@ -42,4 +45,20 @@ def create_app(config_object=None):
     if not app.config.get("TESTING"):
         from app.geo.parser_supervisor import init_app as init_parser
         init_parser(app)
+
+    # Production SPA (PythonAnywhere): serve frontend/dist copied to static/spa
+    # root_path is .../app; static lives next to the package, not inside it
+    spa_dir = os.path.join(os.path.dirname(app.root_path), "static", "spa")
+    if os.path.isdir(spa_dir) and not app.config.get("TESTING"):
+
+        @app.route("/", defaults={"path": ""})
+        @app.route("/<path:path>")
+        def spa(path: str):
+            if path.startswith("api/"):
+                return jsonify({"error": "not_found"}), 404
+            target = os.path.join(spa_dir, path)
+            if path and os.path.isfile(target):
+                return send_from_directory(spa_dir, path)
+            return send_from_directory(spa_dir, "index.html")
+
     return app
