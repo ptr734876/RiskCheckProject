@@ -1,4 +1,3 @@
-
 from app.extensions import db
 
 class QuestionnaireResponse(db.Model):
@@ -13,8 +12,8 @@ class QuestionnaireResponse(db.Model):
     sale_urgency = db.Column(db.String(30))
     current_step = db.Column(db.Integer, nullable=False, default=1)
     completed = db.Column(db.Boolean, nullable=False, default=False)
+    answers_json = db.Column(db.JSON)
     user = db.relationship("User", back_populates="questionnaire")
-
     def to_dict(self):
         return {
             "owners_count": self.owners_count,
@@ -24,4 +23,5 @@ class QuestionnaireResponse(db.Model):
             "sale_urgency": self.sale_urgency,
             "current_step": self.current_step,
             "completed": self.completed,
+            "answers": self.answers_json or {},
         }

@@ -1,4 +1,3 @@
-
 RISK_RULES = {
     "railway":[(500,"high"),(1500,"medium"),(3000,"low")],
     "industrial_zone":[(1000,"high"),(3000,"medium"),(5000,"low")],

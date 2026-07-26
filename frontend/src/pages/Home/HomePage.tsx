@@ -2,33 +2,34 @@ import React from 'react';
 import { Building2, ArrowRight, Shield, FileText, BookOpen, MapPin, Sparkles, Library, UserPlus, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
+import GlobalSearch from '@/components/layout/GlobalSearch';
 
 const HomePage: React.FC = () => {
   const { isAuthenticated, user, loginAsGuest } = useAuthStore();
   const navigate = useNavigate();
 
-  const ensureAccess = (): boolean => {
+  const ensureAccess = async (): Promise<boolean> => {
     if (isAuthenticated || user?.isGuest) return true;
-    loginAsGuest();
+    await loginAsGuest();
     return true;
   };
 
-  const handleFeatureClick = (path: string) => {
-    ensureAccess();
+  const handleFeatureClick = async (path: string) => {
+    await ensureAccess();
     navigate(path);
   };
 
-  const handleGetStarted = () => {
-    ensureAccess();
+  const handleGetStarted = async () => {
+    await ensureAccess();
     navigate('/app');
   };
 
   const steps = [
     {
       icon: Shield,
-      title: 'Шаг 1',
-      subtitle: 'Карта объектов',
-      description: 'Анализ территории и объекта',
+      title: 'Карта объектов',
+      subtitle: 'Анализ территории и объекта',
+      description: '',
       color: 'text-blue-600',
       bg: 'bg-blue-50',
       border: 'border-blue-200',
@@ -36,9 +37,9 @@ const HomePage: React.FC = () => {
     },
     {
       icon: FileText,
-      title: 'Шаг 2',
-      subtitle: 'Комплект документов',
-      description: 'Все необходимые документы для совершения сделки',
+      title: 'Комплект документов',
+      subtitle: 'Все необходимые документы для совершения сделки',
+      description: '',
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
       border: 'border-emerald-200',
@@ -46,9 +47,9 @@ const HomePage: React.FC = () => {
     },
     {
       icon: BookOpen,
-      title: 'Шаг 3',
-      subtitle: 'Пошаговые инструкции',
-      description: 'Все этапы и действия для продажи недвижимости',
+      title: 'Пошаговые инструкции',
+      subtitle: 'Все этапы и действия для продажи недвижимости',
+      description: '',
       color: 'text-violet-600',
       bg: 'bg-violet-50',
       border: 'border-violet-200',
@@ -58,32 +59,36 @@ const HomePage: React.FC = () => {
 
   const benefits = [
     'Персональный комплект документов под ваш объект',
-    'Индивидуальные алгоритмы и инструкции',
-    'Эксклюзивные данные на карте',
+    'Индивидуальные пошаговые инструкции',
     'Рекомендации по вашей ситуации',
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-blue-50 flex flex-col">
-      {/* Navigation */}
       <nav className="bg-white/95 backdrop-blur-sm border-b-2 border-border shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <Building2 className="w-6 h-6 text-primary" strokeWidth={1.5} />
             </div>
-            <span className="text-xl font-bold font-display text-text-primary">
+            <span className="text-xl font-bold font-display text-text-primary hidden sm:inline">
               Атлас продаж
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <GlobalSearch
+            className="relative flex-1 max-w-xl mx-2"
+            beforeNavigate={async () => {
+              await ensureAccess();
+            }}
+          />
+          <div className="flex items-center gap-3 shrink-0">
             {isAuthenticated && !user?.isGuest ? (
               <button onClick={() => navigate('/app')} className="btn-primary">
                 Перейти в приложение
               </button>
             ) : (
               <>
-                <button onClick={handleGetStarted} className="btn-ghost font-semibold">
+                <button onClick={handleGetStarted} className="btn-ghost font-semibold hidden md:inline-flex">
                   Попробовать как гость
                 </button>
                 <button onClick={() => navigate('/auth')} className="btn-primary flex items-center gap-2">
@@ -98,22 +103,18 @@ const HomePage: React.FC = () => {
       <div className="flex-1 flex items-center">
         <div className="max-w-7xl mx-auto px-6 w-full py-8">
           <div className="text-center mb-10">
-            <h1 className="text-4xl md:text-5xl font-bold font-display leading-tight">
+            <h1 className="text-3xl md:text-4xl font-bold font-display leading-tight">
               <span className="text-text-primary">Продажа недвижимости</span>
               <br />
               <span className="text-primary">проще, чем кажется</span>
             </h1>
-            
-            <div className="mt-4 max-w-3xl mx-auto">
-              <p className="text-lg md:text-xl text-text-secondary">
-                Аналитика, карта объектов, документы, алгоритмы и полезные материалы
+            <div className="mt-3 max-w-3xl mx-auto">
+              <p className="text-base md:text-lg text-text-secondary">
+                  Мы собрали для вас документы и инструкции в единую систему. Разобраться в нюансах сделки проще, когда всё необходимое есть{' '}
               </p>
-              <p className="text-lg md:text-xl text-text-secondary mt-1">
-                — всё{' '}
-                <span className="text-primary/90 font-semibold">
-                  в Атласе продаж
-                </span>
-              </p>
+              <h1 className="text-3xl md:text-4xl font-bold font-display leading-tight">
+              <span className="text-primary">в Атласе продаж</span>
+            </h1>
             </div>
           </div>
 
@@ -121,14 +122,14 @@ const HomePage: React.FC = () => {
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 border-2 border-primary/20 p-6 md:p-8">
               <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
               <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" />
-              
+
               <div className="relative flex flex-col md:flex-row items-center gap-6 md:gap-8">
                 <div className="flex-shrink-0">
                   <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
                     <UserPlus className="w-8 h-8 text-primary" strokeWidth={1.5} />
                   </div>
                 </div>
-                
+
                 <div className="flex-1 text-center md:text-left">
                   <h3 className="text-xl md:text-2xl font-bold text-text-primary mb-2">
                     Войдите в аккаунт — получите больше!
@@ -142,7 +143,7 @@ const HomePage: React.FC = () => {
                     ))}
                   </div>
                 </div>
-                
+
                 <div className="flex-shrink-0">
                   <button
                     onClick={() => navigate('/auth')}
@@ -157,7 +158,6 @@ const HomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Steps Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             {steps.map((step, i) => (
               <button
@@ -184,7 +184,6 @@ const HomePage: React.FC = () => {
             ))}
           </div>
 
-          {/* Журнал — увеличенная заметная кнопка */}
           <div className="flex justify-center">
             <button
               onClick={() => handleFeatureClick('/app/materials')}
@@ -202,6 +201,34 @@ const HomePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <footer className="border-t border-gray-200 bg-white/50 backdrop-blur-sm mt-auto">
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-gray-400" strokeWidth={1.5} />
+              <span className="text-sm font-medium text-gray-600">Атлас продаж</span>
+              <span className="text-xs text-gray-300">•</span>
+              <span className="text-xs text-gray-400">{new Date().getFullYear()}</span>
+            </div>
+
+            <div className="text-center max-w-2xl">
+              <p className="text-xs text-gray-400 leading-relaxed">
+                <span className="font-medium text-gray-500">Внимание:</span> Вся информация, представленная на сайте,
+                носит исключительно справочный и информационный характер и не является публичной офертой.
+                Данные могут быть неактуальными — рекомендуем проверять актуальность информации в официальных источниках.
+                За достоверность предоставленных сведений мы не несём ответственности.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs text-gray-400">
+              <a href="#" className="hover:text-gray-600 transition-colors"></a>
+              <span>•</span>
+              <a href="#" className="hover:text-gray-600 transition-colors"></a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

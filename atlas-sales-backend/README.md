@@ -1,61 +1,19 @@
-
 # Atlas Sales Backend
 
-Рабочий учебный Flask-бэкенд для макета сервиса **«Атлас продаж»**.
+Flask API сервиса «Атлас продаж». Общая инструкция — в корневом `../README.md`.
 
-## Реализовано
-
-- регистрация, вход, выход и текущий пользователь;
-- гостевой режим;
-- сохранение анкеты;
-- каталог объектов недвижимости;
-- демонстрационный объект `ул. Садовая, 14`;
-- юридические сведения и окружение объекта;
-- rule-based анализ рисков окружения;
-- персонализируемый список документов по анкете;
-- отметка собранных документов и расчёт прогресса;
-- алгоритмы действий;
-- отметка шагов и расчёт прогресса;
-- статьи, поиск и фильтрация;
-- данные для карты и МФЦ;
-- автоматические тесты.
-
-## Важно
-
-Это MVP. Реальные интеграции с Росреестром, ЕГРН, картографическими API,
-СПС и реестрами риелторов не подменены выдуманными запросами.
-Сейчас используются демонстрационные данные и готовые точки расширения.
-
-## Запуск на Ubuntu / Linux
+## Быстрый старт
 
 ```bash
-cd atlas-sales-backend
-
-python3 --version
-python3 -m venv .venv
-source .venv/bin/activate
-
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r ../requirements.txt
 cp .env.example .env
-
-flask --app run.py init-db
-flask --app run.py seed-demo
-flask --app run.py run --debug
+flask --app run.py init-db && flask --app run.py seed-demo
+flask --app run.py run --port 5000 --debug
 ```
 
-Открыть:
-
-```text
-http://127.0.0.1:5000/api/health
-```
-
-## Тесты
-
-```bash
-pytest
-```
+Парсер: `rosreestr-parser/` (автозапуск). Контент: `content/README.md`.
+API и тесты — ниже.
 
 ## API
 
@@ -74,14 +32,15 @@ POST /api/auth/guest
 ```text
 GET /api/questionnaire
 PUT /api/questionnaire
+GET /api/questionnaire/schema
 ```
 
 ### Недвижимость
 
 ```text
 GET /api/properties
-GET /api/properties?q=Садовая
 GET /api/properties/<id>
+GET /api/properties/lookup
 ```
 
 ### Риски
@@ -90,96 +49,48 @@ GET /api/properties/<id>
 GET /api/risks/property/<property_id>
 ```
 
-### Документы
+### Документы / алгоритмы / материалы
 
 ```text
 GET  /api/documents
-POST /api/documents/<document_id>/toggle
-```
-
-### Алгоритмы
-
-```text
+GET  /api/documents/sources
+POST /api/documents/<id>/toggle
 GET  /api/algorithms
-GET  /api/algorithms/<algorithm_id>
-POST /api/algorithms/steps/<step_id>/toggle
-```
-
-### Материалы
-
-```text
-GET /api/materials
-GET /api/materials?q=ЕГРН
-GET /api/materials?category=documents
-GET /api/materials/<material_id>
+GET  /api/algorithms/tree
+POST /api/algorithms/steps/<id>/toggle
+GET  /api/materials
+GET  /api/materials/<id>/file
 ```
 
 ### Карта
 
 ```text
-GET /api/map/property/<property_id>/markers
+GET /api/map/search
+GET /api/map/property/<id>
+GET /api/map/geo-lookup
+GET /api/map/offices
+GET /api/map/config
 GET /api/map/document-points
 ```
 
-## Пример регистрации
+### Health
 
-```bash
-curl -X POST http://127.0.0.1:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -c cookies.txt \
-  -d '{
-    "full_name": "Ирина Иванова",
-    "email": "ira@example.com",
-    "password": "secret123"
-  }'
+```text
+GET /api/health
 ```
 
-## Пример анкеты
+## Тесты
 
 ```bash
-curl -X PUT http://127.0.0.1:5000/api/questionnaire \
-  -H "Content-Type: application/json" \
-  -b cookies.txt -c cookies.txt \
-  -d '{
-    "owners_count": "multiple",
-    "maternity_capital": true,
-    "property_type": "apartment",
-    "redevelopment": "unauthorized",
-    "sale_urgency": "three_months",
-    "current_step": 3,
-    "completed": true
-  }'
+pytest
 ```
-
-После этого:
-
-```bash
-curl http://127.0.0.1:5000/api/documents -b cookies.txt
-```
-
-вернёт персонализированный список документов.
 
 ## Архитектура
 
 ```text
 app/
-├── auth/
-├── questionnaire/
-├── property/
-├── risks/
-├── documents/
-├── algorithms/
-├── materials/
-├── map_api/
-├── models/
-├── config.py
-├── extensions.py
-└── __init__.py
+├── auth/ questionnaire/ property/ risks/
+├── documents/ algorithms/ materials/
+├── map_api/ geo/ rosreestr/ models/
+rosreestr-parser/   # дочерний микросервис Playwright
 ```
-
-Используются application factory и Blueprints.
-
-## Подключение frontend
-
-Когда будет код frontend, его JavaScript-запросы нужно направить на эти API.
-Если frontend и backend работают на разных origin/портах, отдельно настраивается CORS.

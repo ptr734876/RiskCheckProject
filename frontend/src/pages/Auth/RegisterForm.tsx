@@ -30,11 +30,16 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
     <div className="bg-white rounded-2xl shadow-xl border-2 border-border p-8">
       <div className="text-center mb-8">
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-          <Building2 className="w-8 h-8 text-primary" strokeWidth={1.5} />
+          <Building2
+            className="w-8 h-8 text-primary"
+            strokeWidth={1.5}
+          />
         </div>
+
         <h2 className="text-2xl font-bold font-display text-text-primary mb-2">
           Создайте аккаунт
         </h2>
+
         <p className="text-text-secondary text-base">
           Для доступа к персональным рекомендациям
         </p>
@@ -51,6 +56,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
           <label className="block text-base font-semibold text-text-primary mb-2">
             ФИО
           </label>
+
           <input
             type="text"
             placeholder="Иванов Иван Иванович"
@@ -65,6 +71,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
           <label className="block text-base font-semibold text-text-primary mb-2">
             Email
           </label>
+
           <input
             type="email"
             placeholder="name@example.com"
@@ -79,21 +86,27 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
           <label className="block text-base font-semibold text-text-primary mb-2">
             Пароль
           </label>
+
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
-              placeholder="Минимум 6 символов"
+              placeholder="Минимум 8 символов"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="input-field pr-12 text-base"
               required
             />
+
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
             >
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              {showPassword ? (
+                <EyeOff className="w-5 h-5" />
+              ) : (
+                <Eye className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>
@@ -107,40 +120,42 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
                 onChange={(e) => setAgreed(e.target.checked)}
                 className="sr-only"
               />
-              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                agreed 
-                  ? 'bg-primary border-primary' 
-                  : 'border-border-dark group-hover:border-primary'
-              }`}>
+
+              <div
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                  agreed
+                    ? 'bg-primary border-primary'
+                    : 'border-border-dark group-hover:border-primary'
+                }`}
+              >
                 {agreed && (
-                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-3 h-3 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={3}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                 )}
               </div>
             </div>
+
             <span className="text-base text-text-secondary group-hover:text-text-primary transition-colors leading-relaxed">
-              Я согласен на{' '}
-              <a 
-                href="#" 
-                className="text-primary underline underline-offset-2 hover:text-primary/80 font-medium"
-                onClick={(e) => e.preventDefault()}
-              >
-                обработку персональных данных
-              </a>
-              {' '}и принимаю{' '}
-              <a 
-                href="#" 
-                className="text-primary underline underline-offset-2 hover:text-primary/80 font-medium"
-                onClick={(e) => e.preventDefault()}
-              >
-                условия политики конфиденциальности
-              </a>
+              Я согласен на обработку персональных данных и принимаю
+              условия политики конфиденциальности
             </span>
           </label>
 
           <p className="text-sm text-text-muted leading-relaxed pl-8">
-            Нажимая кнопку «зарегестрироваться» я подтверждаю, что ознакомлен с тем, что информация, содержащаяся на сайте носит исключительно справочный характер
+            Нажимая кнопку «зарегистрироваться» я подтверждаю, что ознакомлен с
+            тем, что информация, содержащаяся на сайте носит исключительно
+            справочный характер
           </p>
         </div>
 

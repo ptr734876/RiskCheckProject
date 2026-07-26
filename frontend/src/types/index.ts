@@ -1,4 +1,3 @@
-// User 
 export interface User {
   id: string;
   email: string;
@@ -7,7 +6,6 @@ export interface User {
   isGuest: boolean;
 }
 
-// Property
 export interface LegalItem {
   label: string;
   value: string;
@@ -26,11 +24,12 @@ export interface SurroundingItem {
 
 export interface Property {
   id: number;
-  x: number;
-  y: number;
+  latitude: number | null;
+  longitude: number | null;
   address: string;
   type: string;
   area: string;
+  source?: string;
   legal: {
     public: LegalItem[];
     private: LegalItem[];
@@ -38,63 +37,86 @@ export interface Property {
   surroundings: SurroundingItem[];
 }
 
-// Documents
+export interface DocumentSource {
+  id: string;
+  title: string;
+  downloadHeader: string;
+}
+
 export interface DocumentItem {
+  id?: number;
+  code?: string;
   title: string;
   note: string[];
   required: boolean;
+  sourceId: string;
   algorithmId: string | null;
   articleId: string | null;
+  collected?: boolean;
 }
-
-// Algorithms 
-
 
 export interface AlgorithmStep {
   id: string;
   text: string;
   description?: string;
-  isSubStep?: boolean;  
+  isSubStep?: boolean;
   link?: {
-    type: 'algorithm' | 'helpful' | 'step2';
+    type: 'algorithm' | 'helpful' | 'step1' | 'step2' | 'external';
     id: string;
     label: string;
+    url?: string;
   } | null;
 }
+
 export interface AlgorithmToggle {
   id: string;
   label: string;
 }
 
 export interface AlgorithmConfig {
-  title: string;
+  id: string;
+  displayTitle: string;
   subtitle?: string;
   steps: AlgorithmStep[];
   toggle?: {
     left: AlgorithmToggle;
     right: AlgorithmToggle;
+    middle1?: AlgorithmToggle;
+    middle2?: AlgorithmToggle;
+    middle3?: AlgorithmToggle;
   };
 }
 
-// Helpful Articles
-export interface HelpfulArticle {
+export interface AlgorithmGroup {
+  id: string;
+  title: string;
+  algorithms: AlgorithmConfig[];
+}
+
+export interface ArticleManifest {
   id: string;
   title: string;
   description: string;
   keyPoints: string[];
-  content: string[];
+  fileName: string;
 }
 
-// MFC
-export interface MfcLocation {
+export interface PlaceItem {
   name: string;
   address: string;
   time: string;
   distance: string;
-  type: 'property' | 'user';
+  latitude: number | null;
+  longitude: number | null;
 }
 
-// Survey
+export interface PlaceCategory {
+  id: string;
+  title: string;
+  subtitle: string;
+  places: PlaceItem[];
+}
+
 export interface SurveyQuestion {
   id: string;
   label: string;
@@ -113,11 +135,4 @@ export interface SurveyStep {
   title: string;
   subtitle: string;
   questions: SurveyQuestion[];
-}
-
-export interface LegalDocument {
-  title: string;
-  subtitle: string;
-  fileName: string;
-  content: string[];
 }
