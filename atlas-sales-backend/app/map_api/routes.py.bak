@@ -84,138 +84,8 @@ def geo_lookup():
     query = str(request.args.get("q", "")).strip()
     if not query:
         return {"error": "query_required"}, 400
-
     lat_arg = request.args.get("lat", type=float)
     lon_arg = request.args.get("lon", type=float)
-
-    def tokenize_address(value: str) -> list[str]:
-        import re
-
-        value = (value or "").lower().replace("ё", "е")
-        tokens = re.findall(r"[0-9a-zа-я]+", value)
-
-        stop_words = {
-            "россия",
-            "рф",
-            "г",
-            "город",
-            "ул",
-            "улица",
-            "д",
-            "дом",
-            "корпус",
-            "к",
-            "строение",
-            "стр",
-            "проспект",
-            "пр",
-            "проезд",
-            "набережная",
-            "линия",
-        }
-
-        result = []
-        for token in tokens:
-            if token in stop_words:
-                continue
-            if len(token) == 1 and not token.isdigit():
-                continue
-            result.append(token)
-
-        return result
-
-    def find_local_property_by_query(query: str):
-        from app.extensions import db
-        from app.models import Property
-
-        query_tokens = tokenize_address(query)
-        if not query_tokens:
-            return None
-
-        properties = db.session.scalars(
-            db.select(Property).order_by(Property.id)
-        ).all()
-
-        best_prop = None
-        best_score = 0
-
-        for prop in properties:
-            address_tokens = tokenize_address(prop.address)
-            address_token_set = set(address_tokens)
-            address_compact = "".join(address_tokens)
-
-            score = 0
-            for token in query_tokens:
-                if token in address_token_set or token in address_compact:
-                    score += 1
-
-            if score > best_score:
-                best_score = score
-                best_prop = prop
-
-            if score == len(query_tokens):
-                return prop
-
-        # Для коротких запросов лучше требовать полное совпадение токенов,
-        # чтобы случайно не вернуть не тот адрес.
-        if best_prop is not None and best_score >= max(2, len(query_tokens) - 1):
-            return best_prop
-
-        return None
-
-    def format_distance(distance_m) -> str:
-        try:
-            distance_m = int(distance_m or 0)
-        except (TypeError, ValueError):
-            distance_m = 0
-
-        if distance_m >= 1000:
-            return f"{distance_m / 1000:.1f} км".replace(".", ",")
-        return f"{distance_m} м"
-
-    def build_db_response(local_property):
-        map_data = get_map_provider().get_property_map(local_property.id) or {}
-
-        surroundings = []
-        for item in map_data.get("surroundings") or []:
-            distance_m = item.get("distance_m")
-            item = dict(item)
-            item.setdefault("distance_text", format_distance(distance_m))
-            item.setdefault(
-                "type",
-                "plus" if item.get("category") == "positive" else "minus",
-            )
-            surroundings.append(item)
-
-        property_data = local_property.to_dict(include_nearby=True)
-        property_data["source"] = "db"
-
-        return {
-            "query": query,
-            "source": "db",
-            "address": local_property.address,
-            "center": {
-                "latitude": local_property.latitude,
-                "longitude": local_property.longitude,
-            },
-            "surroundings": surroundings,
-            "failed": [],
-            "radius_m": current_app.config.get("GEO_SEARCH_RADIUS", 3000),
-            "markers": map_data.get("markers") or [],
-            "property": property_data,
-            "cadastral": None,
-            "cadastral_error": None,
-            "cadastral_message": None,
-        }
-
-    # 1. Если адрес уже есть в нашей БД — сразу возвращаем его.
-    # Внешние API в этом случае не вызываются.
-    if lat_arg is None and lon_arg is None:
-        local_property = find_local_property_by_query(query)
-        if local_property is not None:
-            return build_db_response(local_property)
-
-    # 2. Если адреса нет в БД — работаем по старой логике.
     try:
         found = geocode(query)
         if found is not None and lat_arg is not None and lon_arg is not None:
@@ -223,27 +93,19 @@ def geo_lookup():
     except GeocoderNotConfigured as e:
         return {"error": "geocoder_not_configured", "message": str(e)}, 503
     except Exception:
-        return {
-            "error": "geocoder_failed",
-            "message": "Сервис геокодирования недоступен",
-        }, 502
-
+        return {"error": "geocoder_failed",
+                "message": "Сервис геокодирования недоступен"}, 502
     if found is None:
         if lat_arg is None or lon_arg is None:
-            return {
-                "error": "address_not_found",
-                "message": "Адрес не найден",
-            }, 404
-
+            return {"error": "address_not_found",
+                    "message": "Адрес не найден"}, 404
         found = {
             "lat": lat_arg,
             "lon": lon_arg,
             "address": f"Точка на карте ({lat_arg:.4f}, {lon_arg:.4f})",
         }
-
     radius = current_app.config.get("GEO_SEARCH_RADIUS", 3000)
     surroundings = build_surroundings(found["lat"], found["lon"], radius)
-
     local_property = None
     try:
         prop = get_property_provider().lookup_by_address(query)
@@ -251,11 +113,9 @@ def geo_lookup():
             local_property = prop.to_dict()
     except Exception:
         local_property = None
-
     cadastral = None
     cadastral_error = None
     cadastral_message = None
-
     if local_property is None and request.args.get("cadastral", "1") != "0":
         try:
             parsed = parse_by_coords(found["lat"], found["lon"])
@@ -267,23 +127,16 @@ def geo_lookup():
             cadastral_error = "unavailable"
             cadastral_message = str(e)
             current_app.logger.info("Парсер Росреестра недоступен: %s", e)
-
     return {
         "query": query,
         "source": "yandex+osm",
         "address": found["address"],
-        "center": {
-            "latitude": found["lat"],
-            "longitude": found["lon"],
-        },
+        "center": {"latitude": found["lat"], "longitude": found["lon"]},
         "surroundings": surroundings["items"],
         "failed": surroundings["failed"],
         "radius_m": surroundings["radius_m"],
         "markers": markers_from_surroundings(
-            found["lat"],
-            found["lon"],
-            found["address"],
-            surroundings["items"],
+            found["lat"], found["lon"], found["address"], surroundings["items"]
         ),
         "property": local_property,
         "cadastral": cadastral,
