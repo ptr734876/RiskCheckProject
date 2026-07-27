@@ -84,39 +84,247 @@ def geo_lookup():
     query = str(request.args.get("q", "")).strip()
     if not query:
         return {"error": "query_required"}, 400
+
     lat_arg = request.args.get("lat", type=float)
     lon_arg = request.args.get("lon", type=float)
-    try:
-        found = geocode(query)
-        if found is not None and lat_arg is not None and lon_arg is not None:
-            found = {**found, "lat": lat_arg, "lon": lon_arg}
-    except GeocoderNotConfigured as e:
-        return {"error": "geocoder_not_configured", "message": str(e)}, 503
-    except Exception:
-        return {"error": "geocoder_failed",
-                "message": "Сервис геокодирования недоступен"}, 502
-    if found is None:
-        if lat_arg is None or lon_arg is None:
-            return {"error": "address_not_found",
-                    "message": "Адрес не найден"}, 404
+
+    def format_distance(distance_m) -> str:
+        try:
+            distance_m = int(round(float(distance_m or 0)))
+        except (TypeError, ValueError):
+            distance_m = 0
+
+        if distance_m >= 1000:
+            return f"{distance_m / 1000:.1f} км".replace(".", ",")
+        return f"{distance_m} м"
+
+    def haversine_m(lat1, lon1, lat2, lon2) -> int:
+        import math
+
+        r = 6371000
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        d_phi = math.radians(lat2 - lat1)
+        d_lambda = math.radians(lon2 - lon1)
+
+        a = (
+            math.sin(d_phi / 2) ** 2
+            + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+        )
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return int(round(r * c))
+
+    def normalize_address(value: str) -> str:
+        import re
+
+        value = (value or "").lower().replace("ё", "е")
+        return re.sub(r"[^0-9a-zа-я]+", "", value)
+
+    def find_property_by_address(query: str):
+        from app.extensions import db
+        from app.models import Property
+
+        normalized_query = normalize_address(query)
+        if len(normalized_query) < 4:
+            return None
+
+        properties = db.session.scalars(
+            db.select(Property).order_by(Property.id)
+        ).all()
+
+        for prop in properties:
+            normalized_address = normalize_address(prop.address)
+            if normalized_query in normalized_address or normalized_address in normalized_query:
+                return prop
+
+        return None
+
+    def build_markers_from_db(lat, lon, address, surroundings):
+        markers = [
+            {
+                "type": "property",
+                "label": address,
+                "latitude": lat,
+                "longitude": lon,
+            }
+        ]
+
+        for item in surroundings:
+            markers.append(
+                {
+                    "type": "positive" if item["type"] == "plus" else "risk",
+                    "kind": item["kind"],
+                    "label": item["name"],
+                    "distance_m": item["distance_m"],
+                    "latitude": item["latitude"],
+                    "longitude": item["longitude"],
+                }
+            )
+
+        return markers
+
+    def find_db_surroundings(lat, lon, radius_m):
+        from app.extensions import db
+        from app.models import NearbyObject
+
+        objects = db.session.scalars(
+            db.select(NearbyObject).where(
+                NearbyObject.latitude.is_not(None),
+                NearbyObject.longitude.is_not(None),
+            )
+        ).all()
+
+        found_by_key = {}
+
+        for obj in objects:
+            distance_m = haversine_m(
+                lat,
+                lon,
+                obj.latitude,
+                obj.longitude,
+            )
+
+            if distance_m > radius_m:
+                continue
+
+            category = obj.category or "risk"
+            item_type = "plus" if category == "positive" else "minus"
+
+            item = {
+                "kind": obj.kind,
+                "name": obj.name,
+                "category": category,
+                "type": item_type,
+                "distance_m": distance_m,
+                "distance_text": format_distance(distance_m),
+                "latitude": obj.latitude,
+                "longitude": obj.longitude,
+                "impact": None,
+                "tip": None,
+                "link": None,
+            }
+
+            # Убираем дубли: один и тот же объект мог попасть в БД от разных адресов.
+            key = (
+                obj.kind,
+                obj.name.lower().strip(),
+                round(float(obj.latitude or 0), 5),
+                round(float(obj.longitude or 0), 5),
+            )
+
+            old = found_by_key.get(key)
+            if old is None or item["distance_m"] < old["distance_m"]:
+                found_by_key[key] = item
+
+        items = list(found_by_key.values())
+
+        # Сначала плюсы, потом минусы; внутри — по расстоянию.
+        items.sort(key=lambda x: (0 if x["type"] == "plus" else 1, x["distance_m"]))
+
+        return items
+
+    radius = current_app.config.get("GEO_SEARCH_RADIUS", 3000)
+
+    found = None
+    local_property = None
+
+    # 1. Если пришли координаты, геокодер вообще не нужен.
+    if lat_arg is not None and lon_arg is not None:
         found = {
             "lat": lat_arg,
             "lon": lon_arg,
-            "address": f"Точка на карте ({lat_arg:.4f}, {lon_arg:.4f})",
+            "address": query or f"Точка на карте ({lat_arg:.4f}, {lon_arg:.4f})",
         }
-    radius = current_app.config.get("GEO_SEARCH_RADIUS", 3000)
+
+    # 2. Если ввели адрес, сначала пробуем найти сам объект в БД.
+    # Тогда не нужен даже Яндекс-геокодер.
+    if found is None:
+        local_property = find_property_by_address(query)
+        if local_property is not None:
+            found = {
+                "lat": local_property.latitude,
+                "lon": local_property.longitude,
+                "address": local_property.address,
+            }
+
+    # 3. Если в БД такого адреса нет, только тогда геокодируем адрес.
+    if found is None:
+        try:
+            found = geocode(query)
+        except GeocoderNotConfigured as e:
+            return {"error": "geocoder_not_configured", "message": str(e)}, 503
+        except Exception:
+            return {
+                "error": "geocoder_failed",
+                "message": "Сервис геокодирования недоступен",
+            }, 502
+
+    if found is None:
+        return {
+            "error": "address_not_found",
+            "message": "Адрес не найден",
+        }, 404
+
+    # 4. Главное изменение:
+    # сначала ищем окружение рядом с координатами в нашей БД.
+    db_surroundings = find_db_surroundings(
+        found["lat"],
+        found["lon"],
+        radius,
+    )
+
+    if db_surroundings:
+        if local_property is None:
+            local_property = find_property_by_address(query)
+
+        property_data = (
+            local_property.to_dict(include_nearby=True)
+            if local_property is not None
+            else None
+        )
+
+        if property_data is not None:
+            property_data["source"] = "db"
+
+        return {
+            "query": query,
+            "source": "db_nearby",
+            "address": found["address"],
+            "center": {
+                "latitude": found["lat"],
+                "longitude": found["lon"],
+            },
+            "surroundings": db_surroundings,
+            "failed": [],
+            "radius_m": radius,
+            "markers": build_markers_from_db(
+                found["lat"],
+                found["lon"],
+                found["address"],
+                db_surroundings,
+            ),
+            "property": property_data,
+            "cadastral": None,
+            "cadastral_error": None,
+            "cadastral_message": None,
+        }
+
+    # 5. Если в БД рядом ничего нет — только тогда идём во внешние API.
     surroundings = build_surroundings(found["lat"], found["lon"], radius)
-    local_property = None
+
+    local_property_data = None
     try:
         prop = get_property_provider().lookup_by_address(query)
         if prop is not None:
-            local_property = prop.to_dict()
+            local_property_data = prop.to_dict()
     except Exception:
-        local_property = None
+        local_property_data = None
+
     cadastral = None
     cadastral_error = None
     cadastral_message = None
-    if local_property is None and request.args.get("cadastral", "1") != "0":
+
+    if local_property_data is None and request.args.get("cadastral", "1") != "0":
         try:
             parsed = parse_by_coords(found["lat"], found["lon"])
             if parsed is not None:
@@ -127,18 +335,25 @@ def geo_lookup():
             cadastral_error = "unavailable"
             cadastral_message = str(e)
             current_app.logger.info("Парсер Росреестра недоступен: %s", e)
+
     return {
         "query": query,
         "source": "yandex+osm",
         "address": found["address"],
-        "center": {"latitude": found["lat"], "longitude": found["lon"]},
+        "center": {
+            "latitude": found["lat"],
+            "longitude": found["lon"],
+        },
         "surroundings": surroundings["items"],
         "failed": surroundings["failed"],
         "radius_m": surroundings["radius_m"],
         "markers": markers_from_surroundings(
-            found["lat"], found["lon"], found["address"], surroundings["items"]
+            found["lat"],
+            found["lon"],
+            found["address"],
+            surroundings["items"],
         ),
-        "property": local_property,
+        "property": local_property_data,
         "cadastral": cadastral,
         "cadastral_error": cadastral_error,
         "cadastral_message": cadastral_message,
