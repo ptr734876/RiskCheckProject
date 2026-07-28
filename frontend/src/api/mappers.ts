@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { resolveSurroundingHint } from '@/data/hints';
+import { resolveLegalHint, resolveSurroundingHint, getLegalUnavailable } from '@/data/hints';
 import type {
   AlgorithmGroup,
   DocumentItem,
@@ -15,6 +15,54 @@ const PROPERTY_TYPE_LABEL: Record<string, string> = {
   house: 'Дом',
   commercial: 'Коммерческая',
 };
+
+const LEGAL_FIELDS: Array<{ key: string; label: string }> = [
+  { key: 'cadastral_number', label: 'Кадастровый номер' },
+  { key: 'area', label: 'Площадь объекта' },
+  { key: 'land_category', label: 'Категория земель' },
+  { key: 'permitted_use', label: 'Разрешённое использование' },
+  { key: 'ownership_type', label: 'Форма собственности' },
+  { key: 'status', label: 'Статус записи в ЕГРН' },
+  { key: 'cost', label: 'Кадастровая стоимость' },
+  { key: 'encumbrances', label: 'Обременения и ограничения' },
+];
+
+function buildCadastralLegal(cadastral: Record<string, any>) {
+  const publicItems = LEGAL_FIELDS.map(({ key, label }) => {
+    const value = cadastral?.[key];
+    const hasValue = value != null && String(value).trim() !== '';
+    const hint = resolveLegalHint(key, hasValue ? String(value) : null, {
+      unavailable: !hasValue,
+    });
+
+    return {
+      label,
+      value: hasValue ? String(value) : '—',
+      impact: hint.impact,
+      tip: hint.tip,
+      link: hint.link ?? null,
+    };
+  });
+
+  const extraItems = Object.entries(cadastral?.extra || {}).map(([label, value]) => ({
+    label,
+    value: String(value),
+    impact: getLegalUnavailable().impact,
+    tip: 'Поле получено из публичной кадастровой карты. Сверьте с выпиской ЕГРН.',
+    link: null,
+  }));
+
+  return [...publicItems, ...extraItems];
+}
+
+function displayArea(value: unknown): string {
+  if (value == null || String(value).trim() === '') return '—';
+  if (typeof value === 'number') return `${value} м²`;
+
+  const text = String(value).trim();
+  if (/м²|кв\.?\s*м/i.test(text)) return text;
+  return `${text} м²`;
+}
 
 export function mapBackendUser(raw: {
   id: number;
@@ -160,6 +208,7 @@ export function mapBackendProperty(
     latitude?: number | null;
     longitude?: number | null;
     source?: string;
+    cadastral?: Record<string, any> | null;
     nearby_objects?: Array<{
       kind: string;
       name: string;
@@ -184,6 +233,27 @@ export function mapBackendProperty(
         distance_m: obj.distance_m,
       })
     );
+
+  const cadastral = raw.cadastral;
+
+  if (cadastral) {
+    return {
+      id,
+      latitude: raw.latitude ?? null,
+      longitude: raw.longitude ?? null,
+      address: raw.address,
+      type: cadastral.permitted_use
+        ? String(cadastral.permitted_use)
+        : 'Не определён',
+      area: displayArea(cadastral.area ?? raw.area),
+      source: 'rosreestr_parser',
+      legal: {
+        public: buildCadastralLegal(cadastral),
+        private: [],
+      },
+      surroundings: Array.isArray(surroundings) ? surroundings : [],
+    };
+  }
 
   return {
     id,
