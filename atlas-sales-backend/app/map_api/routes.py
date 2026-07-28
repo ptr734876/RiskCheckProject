@@ -265,8 +265,10 @@ def geo_lookup():
             "message": "Адрес не найден",
         }, 404
 
-    # 4. Главное изменение:
-    # сначала ищем окружение рядом с координатами в нашей БД.
+    # 4. Сначала ищем окружение рядом с координатами в нашей БД.
+    # ВАЖНО: парсер Росреестра здесь НЕ вызывается, чтобы карта и факты об окружении
+    # отображались быстро. Юридические данные нужно грузить отдельным запросом
+    # /api/map/cadastral-lookup.
     db_surroundings = find_db_surroundings(
         found["lat"],
         found["lon"],
@@ -309,7 +311,8 @@ def geo_lookup():
             "cadastral_message": None,
         }
 
-    # 5. Если в БД рядом ничего нет — только тогда идём во внешние API.
+    # 5. Если в БД рядом ничего нет — только тогда идём во внешние API для окружения.
+    # Парсер Росреестра всё равно НЕ вызывается здесь: он вынесен в отдельный endpoint.
     surroundings = build_surroundings(found["lat"], found["lon"], radius)
 
     local_property_data = None
@@ -319,22 +322,6 @@ def geo_lookup():
             local_property_data = prop.to_dict()
     except Exception:
         local_property_data = None
-
-    cadastral = None
-    cadastral_error = None
-    cadastral_message = None
-
-    if local_property_data is None and request.args.get("cadastral", "1") != "0":
-        try:
-            parsed = parse_by_coords(found["lat"], found["lon"])
-            if parsed is not None:
-                cadastral = normalize_parser_result(parsed)
-            else:
-                cadastral_error = "not_found"
-        except ParserUnavailable as e:
-            cadastral_error = "unavailable"
-            cadastral_message = str(e)
-            current_app.logger.info("Парсер Росреестра недоступен: %s", e)
 
     return {
         "query": query,
@@ -354,10 +341,59 @@ def geo_lookup():
             surroundings["items"],
         ),
         "property": local_property_data,
-        "cadastral": cadastral,
-        "cadastral_error": cadastral_error,
-        "cadastral_message": cadastral_message,
+        "cadastral": None,
+        "cadastral_error": None,
+        "cadastral_message": None,
     }
+
+
+@bp.get("/cadastral-lookup")
+def cadastral_lookup():
+    lat = request.args.get("lat", type=float)
+    lon = request.args.get("lon", type=float)
+
+    if lat is None or lon is None:
+        return {
+            "error": "coordinates_required",
+            "message": "Нужны координаты объекта",
+        }, 400
+
+    if request.args.get("cadastral", "1") == "0":
+        return {
+            "cadastral": None,
+            "cadastral_error": None,
+            "cadastral_message": None,
+        }
+
+    try:
+        parsed = parse_by_coords(lat, lon)
+        if parsed is not None:
+            return {
+                "cadastral": normalize_parser_result(parsed),
+                "cadastral_error": None,
+                "cadastral_message": None,
+            }
+
+        return {
+            "cadastral": None,
+            "cadastral_error": "not_found",
+            "cadastral_message": "Публичная кадастровая карта не нашла объект по этим координатам",
+        }
+    except ParserUnavailable as e:
+        current_app.logger.info("Парсер Росреестра недоступен: %s", e)
+        return {
+            "cadastral": None,
+            "cadastral_error": "unavailable",
+            "cadastral_message": str(e),
+        }
+    except Exception as e:
+        current_app.logger.exception("Ошибка при получении кадастровых данных")
+        return {
+            "cadastral": None,
+            "cadastral_error": "failed",
+            "cadastral_message": str(e),
+        }
+
 
 @bp.get("/offices")
 def nearby_offices():
