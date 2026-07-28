@@ -14,7 +14,7 @@
     "surroundings_saved": 21,
     "cadastral_source": "parser_unavailable",
     "cadastral_number": null,
-    "offices_failed": false,
+    "offices_failed": true,
     "mfc_count": 0
   },
   {
@@ -66,8 +66,8 @@
     "address": "Санкт-Петербург, Морская набережная, 33",
     "property_id": 8,
     "surroundings_saved": 21,
-    "cadastral_source": "parser",
-    "cadastral_number": "78:06:0002203:1",
+    "cadastral_source": "parser_unavailable",
+    "cadastral_number": null,
     "offices_failed": true,
     "mfc_count": 0
   },
