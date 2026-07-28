@@ -563,14 +563,14 @@ const Step2Page: React.FC = () => {
             {placesLoading && (
               <p className="text-sm text-text-muted">Ищем ближайшие офисы…</p>
             )}
-            {!placesLoading &&
+            {/* {!placesLoading &&
               placesFailed &&
               placeCategories.every((c) => c.places.length === 0) && (
                 <div className="text-sm text-amber-800 bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
                   Не удалось проверить ближайшие офисы. Можно открыть
                   поиск на карте вручную.
                 </div>
-              )}
+              )} */}
             {!placesLoading &&
               OFFICE_FALLBACK.map((fallback) => {
                 const category =
