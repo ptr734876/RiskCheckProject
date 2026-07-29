@@ -84,7 +84,7 @@ const HomePage: React.FC = () => {
           <div className="flex items-center gap-3 shrink-0">
             {isAuthenticated && !user?.isGuest ? (
               <button onClick={() => navigate('/app')} className="btn-primary">
-                Перейти в приложение
+                Перейти к карте объектов
               </button>
             ) : (
               <>

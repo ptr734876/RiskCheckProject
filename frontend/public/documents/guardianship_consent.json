@@ -1,0 +1,16 @@
+{
+  "code": "guardianship_consent",
+  "title": "Согласие органа опеки и попечительства на сделку",
+  "note": [],
+  "required": false,
+  "sourceId": "on_hand",
+  "algorithmId": "maternal_capital",
+  "articleId": null,
+  "conditions": [
+    {
+      "questionId": "maternityCapital",
+      "value": "yes"
+    }
+  ],
+  "order": 101
+}

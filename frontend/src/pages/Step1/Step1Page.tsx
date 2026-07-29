@@ -620,14 +620,21 @@ const Step1Page: React.FC = () => {
 
       const surroundings: SurroundingItemData[] = (data.surroundings || []).map(
         (raw: any) => {
+          const distanceText =
+            raw.distance_text ||
+            (raw.distance_m != null
+              ? raw.distance_m >= 1000
+                ? `${(raw.distance_m / 1000).toFixed(1)} км`
+                : `${raw.distance_m} м`
+              : '—');
           const hint = resolveSurroundingHint(
             raw.kind,
             raw.type,
-            { name: raw.name, distance: raw.distance_text },
+            { name: raw.name, distance: distanceText },
             { impact: raw.impact, tip: raw.tip, link: raw.link }
           );
           return {
-            text: `${raw.name} — ${raw.distance_text}`,
+            text: `${raw.name} — ${distanceText}`,
             type: raw.type,
             impact: hint.impact,
             tip: hint.tip,

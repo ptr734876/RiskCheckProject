@@ -93,17 +93,18 @@ export function mapBackendDocument(raw: {
   articleId?: string | null;
   collected?: boolean;
 }): DocumentItem & { id: number; code: string; collected: boolean } {
-  const note =
-    raw.notes ||
-    raw.note ||
-    [raw.description, raw.obtain_algorithm].filter(
-      (x): x is string => Boolean(x && String(x).trim())
-    );
+  const note = Array.isArray(raw.notes)
+    ? raw.notes
+    : Array.isArray(raw.note)
+      ? raw.note
+      : [raw.description, raw.obtain_algorithm].filter(
+          (x): x is string => Boolean(x && String(x).trim())
+        );
   return {
     id: raw.id,
     code: raw.code,
     title: raw.title,
-    note: note.length ? note : [raw.title],
+    note,
     required: Boolean(raw.required ?? raw.is_required ?? true),
     sourceId: raw.sourceId || 'on_hand',
     algorithmId: raw.algorithmId ?? null,

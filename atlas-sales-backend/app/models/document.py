@@ -18,7 +18,7 @@ class Document(db.Model):
     sort_order = db.Column(db.Integer, nullable=False, default=1)
     def to_dict(self):
         notes = self.notes_json
-        if not notes:
+        if notes is None:
             notes = [x for x in (self.description, self.obtain_algorithm) if x]
         return {
             "id": self.id,

@@ -29,6 +29,7 @@ def test_questionnaire_personalizes_documents(client):
     payload = client.get("/api/documents").get_json()
     codes = {x["code"] for x in payload["items"]}
     assert "maternity_capital_documents" in codes
+    assert "guardianship_consent" in codes
     assert "passport_rf" in codes
     assert payload["personalized"] is True
     assert len(payload.get("sources") or []) >= 1

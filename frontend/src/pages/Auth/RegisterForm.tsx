@@ -112,8 +112,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
         </div>
 
         <div className="space-y-3">
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <div className="relative flex items-center">
+          <div className="flex items-start gap-3 group">
+            <label className="relative flex items-center cursor-pointer shrink-0 mt-0.5">
               <input
                 type="checkbox"
                 checked={agreed}
@@ -144,13 +144,19 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
                   </svg>
                 )}
               </div>
-            </div>
+            </label>
 
-            <span className="text-base text-text-secondary group-hover:text-text-primary transition-colors leading-relaxed">
+            <a
+              href={`/auth/${encodeURIComponent(
+                'Политика_обработки_персональных_данных_проект_1.docx'
+              )}`}
+              download="Политика_обработки_персональных_данных.docx"
+              className="text-base text-primary font-medium underline underline-offset-2 hover:text-primary-dark transition-colors leading-relaxed"
+            >
               Я согласен на обработку персональных данных и принимаю
               условия политики конфиденциальности
-            </span>
-          </label>
+            </a>
+          </div>
 
           <p className="text-sm text-text-muted leading-relaxed pl-8">
             Нажимая кнопку «зарегистрироваться» я подтверждаю, что ознакомлен с

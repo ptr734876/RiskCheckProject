@@ -44,6 +44,11 @@ _DEMO_PLACE_CATEGORIES = [
     },
 ]
 
+def _format_distance(meters: int) -> str:
+    if meters < 1000:
+        return f"{meters} м"
+    return f"{meters / 1000:.1f} км".replace(".", ",")
+
 class MapDataProvider(Protocol):
     def get_property_map(self, property_id: int) -> dict | None: ...
     def search(self, query: str) -> dict: ...
@@ -84,6 +89,7 @@ def _surroundings_for(item: Property) -> list[dict]:
                 "category": obj.category,
                 "type": "plus" if is_plus else "minus",
                 "distance_m": obj.distance_m,
+                "distance_text": _format_distance(int(obj.distance_m or 0)),
                 "latitude": obj.latitude,
                 "longitude": obj.longitude,
                 "impact": risk.get("reason")

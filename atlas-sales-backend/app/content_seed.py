@@ -87,7 +87,7 @@ def seed_documents_from_files() -> int:
                 code=code,
                 title=data["title"],
                 description=(notes[0] if notes else data.get("description")),
-                notes_json=notes,
+                notes_json=notes if isinstance(notes, list) else [],
                 is_required=bool(data.get("required", data.get("is_required", True))),
                 category=data.get("category") or "general",
                 obtain_algorithm=notes[1] if len(notes) > 1 else data.get("obtain_algorithm"),
